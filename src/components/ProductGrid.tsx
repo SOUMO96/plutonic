@@ -29,10 +29,7 @@ export default function ProductGrid({ title }: ProductGridProps) {
               <h3 className="font-bold text-gray-900 text-sm md:text-base truncate mb-1 group-hover:text-[#e11b22] transition-colors">
                 {product.name}
               </h3>
-              <p className="text-gray-500 text-xs md:text-sm mb-2 font-medium">
-                {product.category}
-              </p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mt-1">
                 <span className="font-bold text-gray-900 text-sm md:text-base">
                   ₹ {product.price}
                 </span>

@@ -13,9 +13,6 @@ export default function Navbar() {
             <a href="#" className="h-full flex items-center text-sm font-bold tracking-wider text-gray-900 border-b-4 border-red-500 pt-1">
               MEN
             </a>
-            <a href="#" className="h-full flex items-center text-sm font-bold tracking-wider text-gray-500 hover:text-gray-900 pt-1 border-b-4 border-transparent transition-colors">
-              SNEAKERS
-            </a>
           </div>
         </div>
 
