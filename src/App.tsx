@@ -22,7 +22,6 @@ function CinematicIntro({
     <div className={`cinematic-intro-ui ${revealed ? 'is-revealed' : ''} ${dismissed ? 'is-dismissed' : ''}`}>
       <div className="cinematic-corner-brand">PLUTONIC <span>—</span> AN EXPRESSION IN MOTION</div>
       <div className="cinematic-brand-stack" aria-live="polite">
-        <div className="cinematic-brand-aura" />
         <PlutonicLogoReveal active={revealed} reducedMotion={reducedMotion} />
       </div>
       {!dismissed && <button className="cinematic-skip" onClick={onSkip}>SKIP INTRO <span>↗</span></button>}
