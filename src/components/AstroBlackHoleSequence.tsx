@@ -42,8 +42,12 @@ export default function AstroBlackHoleSequence({
   const videoRefs = useRef<Array<HTMLVideoElement | null>>([]);
   const [activeClip, setActiveClip] = useState(0);
   const [videoAvailable, setVideoAvailable] = useState<boolean[]>([false, false, false]);
+  const [showObservation, setShowObservation] = useState(true);
+  const activeClipRef = useRef(0);
   const advanceLocked = useRef(false);
   const revealSent = useRef(false);
+
+  activeClipRef.current = activeClip;
 
   useEffect(() => {
     if (reducedMotion) return;
@@ -54,7 +58,7 @@ export default function AstroBlackHoleSequence({
       if (!video || index === activeClip) return;
       // Let the previous shot finish its opacity crossfade before pausing it.
       window.setTimeout(() => {
-        if (index !== activeClip) video.pause();
+        if (index !== activeClipRef.current) video.pause();
       }, 1250);
     });
 
@@ -63,6 +67,12 @@ export default function AstroBlackHoleSequence({
       // If autoplay is denied, the EHT observation remains visible underneath.
     });
   }, [activeClip, reducedMotion]);
+
+  useEffect(() => {
+    if (reducedMotion) return;
+    const timer = window.setTimeout(() => setShowObservation(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [reducedMotion]);
 
   useEffect(() => {
     if (reducedMotion && !revealSent.current) {
@@ -114,7 +124,7 @@ export default function AstroBlackHoleSequence({
   return (
     <div className={`astro-scene astro-mode-${mode}`} aria-label="EHT observation and NASA black-hole simulation">
       <img
-        className="astro-observation"
+        className={'astro-observation ' + (showObservation ? 'is-visible' : 'is-receded')}
         src={EHT_OBSERVATION}
         alt=""
         fetchPriority="high"
@@ -130,7 +140,7 @@ export default function AstroBlackHoleSequence({
           muted
           playsInline
           autoPlay={index === 0}
-          preload={index === 0 ? 'auto' : 'metadata'}
+          preload={index === activeClip || index === activeClip + 1 ? 'auto' : 'metadata'}
           loop={index === CLIPS.length - 1}
           onCanPlay={() => handleCanPlay(index)}
           onTimeUpdate={(event) => handleTimeUpdate(index, event)}
