@@ -15,10 +15,11 @@ Create a production build with `npm run build`. Run TypeScript checks with `npm 
 
 ## Opening sequence
 
-1. Opens on the Event Horizon Telescope Collaboration's M87* observation.
-2. Transitions into NASA/JPL-Caltech simulation footage for a close-up, pullback, and orbital camera sequence.
-3. The final orbital shot continues while the temporary brand mark, wordmark, and punchline appear.
-4. The visitor proceeds to the FOR HIM / FOR HER collection gateway.
+1. Opens on the Event Horizon Telescope Collaboration's M87* observation, held until the first NASA clip is ready.
+2. Crossfades through NASA/JPL-Caltech simulation footage: close approach, camera pullback, then orbital movement.
+3. During the final orbital shot, the background eases smaller while the replaceable temporary mark blooms into view, followed by the wordmark and punchline.
+4. The same video element stays mounted and continues playing as the background becomes blurred and darker behind the FOR HIM / FOR HER split-screen.
+5. Selecting a category smoothly brings in that collection without reloading the page or replacing the cinematic background.
 
 The intro has a skip control and respects `prefers-reduced-motion`. The real observation remains as a still fallback if the external video is unavailable or autoplay is blocked.
 
