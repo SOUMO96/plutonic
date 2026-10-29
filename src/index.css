@@ -853,7 +853,6 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
 }
 
 
-/* PLUTONIC identity reveal: particles resolve into the supplied logo asset. */
 .plutonic-logo-reveal {
   position: fixed;
   z-index: 6;
@@ -900,8 +899,6 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
   transform: translateY(0);
 }
 
-/* Final camera push-in: the approved pullback footage recedes to black as
-   its light converges into the logo-driven particle field. */
 @keyframes black-hole-to-logo-push {
   0% {
     transform: rotate(-57.3deg) scale(1.42);
@@ -952,13 +949,6 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
   opacity: 0;
   transition: opacity .8s ease;
 }
-
-
-/* Logo-cutover cleanup: no independently drawn photon-ring border and no
-   decorative orbital aura. The source video provides the natural ring. */
-.astro-photon-ring,
-.cinematic-brand-aura,
-.logo-morph-particles { display: none !important; }
 
 /* The uploaded slash is measured at -21.3deg on screen. The supplied
    reference pullback frame's accretion plane is +36deg, so rotate the video
