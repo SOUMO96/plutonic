@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AstroBlackHoleSequence, { type AstroSceneMode } from './components/AstroBlackHoleSequence';
-import BrandMark from './components/BrandMark';
+import PlutonicLogoReveal from './components/PlutonicLogoReveal';
 import CategorySelect from './components/CategorySelect';
 import Storefront from './components/Storefront';
 
@@ -11,19 +11,19 @@ function CinematicIntro({
   revealed,
   dismissed = false,
   onSkip,
+  reducedMotion,
 }: {
   revealed: boolean;
   dismissed?: boolean;
   onSkip: () => void;
+  reducedMotion: boolean;
 }) {
   return (
     <div className={`cinematic-intro-ui ${revealed ? 'is-revealed' : ''} ${dismissed ? 'is-dismissed' : ''}`}>
       <div className="cinematic-corner-brand">PLUTONIC <span>—</span> AN EXPRESSION IN MOTION</div>
       <div className="cinematic-brand-stack" aria-live="polite">
         <div className="cinematic-brand-aura" />
-        <div className="cinematic-brand-mark"><BrandMark size={94} /></div>
-        <p className="cinematic-brand-name">PLUTONIC</p>
-        <p className="cinematic-brand-line">BEYOND THE ORDINARY.</p>
+        <PlutonicLogoReveal active={revealed} reducedMotion={reducedMotion} />
       </div>
       {!dismissed && <button className="cinematic-skip" onClick={onSkip}>SKIP INTRO <span>↗</span></button>}
       <div className="cinematic-bottom-note">M87* / A STUDY IN GRAVITY</div>
@@ -97,6 +97,7 @@ export default function App() {
             revealed={brandReveal}
             dismissed={stage === 'categories'}
             onSkip={skipIntro}
+            reducedMotion={reducedMotion}
           />
         )}
         {stage === 'categories' && (
