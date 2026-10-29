@@ -15,11 +15,12 @@ Create a production build with `npm run build`. Run TypeScript checks with `npm 
 
 ## Opening sequence
 
-1. Opens on the Event Horizon Telescope Collaboration's M87* observation, held until the first NASA clip is ready.
-2. Crossfades through NASA/JPL-Caltech simulation footage: close approach, camera pullback, then orbital movement.
-3. During the final orbital shot, the background eases smaller while the replaceable temporary mark blooms into view, followed by the wordmark and punchline.
-4. The same video element stays mounted and continues playing as the background becomes blurred and darker behind the FOR HIM / FOR HER split-screen.
-5. Selecting a category smoothly brings in that collection without reloading the page or replacing the cinematic background.
+1. Opens on the EHT M87* observation fallback, then plays the single approved NASA/JPL-Caltech pullback shot.
+2. At the end of the pullback, the background performs a cinematic push-in and darkens toward black.
+3. Warm accretion-disk light and white photon-ring particles converge, then reform into points sampled from the supplied PLUTONIC logo artwork.
+4. Once the particle field settles, the original replaceable logo asset at `public/plutonic-logo.svg` appears sharply for the final brand hold.
+5. The punchline remains an empty editable constant in `src/components/PlutonicLogoReveal.tsx`; no tagline is invented.
+6. The same background component remains mounted for the subsequent FOR HIM / FOR HER screen.
 
 The intro has a skip control and respects `prefers-reduced-motion`. The real observation remains as a still fallback if the external video is unavailable or autoplay is blocked.
 
@@ -32,9 +33,7 @@ The M87* frame is an observational reconstruction. The moving footage is a NASA 
 
 ## Brand replacement
 
-The temporary orbital emblem is isolated in `src/components/BrandMark.tsx`. Replace the SVG in that component with the final brand asset while keeping its props and wrapper class names. The black-hole sequence and page flow are independent of the logo artwork.
-
-The placeholder is an original orbital mark, not the Grok logo or a Grok wordmark.
+The supplied PLUTONIC artwork is stored as a replaceable asset at `public/plutonic-logo.svg`. The intro samples its bright pixels for the particle destination, then displays that asset itself for the final crisp logo hold. Replace this single asset when the master-resolution brand artwork is available. The black-hole footage and particle timeline are independent of the artwork.
 
 ## Product catalogue
 
@@ -46,8 +45,8 @@ This branch is a visual and interaction prototype. The starter project did not i
 
 ## Performance notes
 
-- Uses native HTML video rather than a custom procedural ring shader.
-- 4K source files are selected on wider desktop viewports; 1080p versions are supplied as the fallback source.
+- Uses the single NASA pullback clip as the moving astrophysical background.
+- Particle destinations are sampled from the supplied logo asset; the original asset is used for the final display.
+- The final shape transition is a cinematic particle morph, not a physically simulated black-hole-to-logo spacetime transformation.
 - The EHT image remains available as a poster / loading fallback.
-- Video is muted and plays inline, as required for most browser autoplay policies.
-- External NASA video assets are streamed from NASA's Scientific Visualization Studio; network availability and autoplay policy can affect the opening sequence.
+- Video is muted and plays inline; network availability and browser autoplay policy can affect the opening sequence.
