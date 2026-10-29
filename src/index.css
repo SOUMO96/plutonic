@@ -356,3 +356,374 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
   .astro-footage { display: none; }
   .astro-observation { opacity: .9; }
 }
+
+
+/* One continuous cinematic canvas: the astrophysical footage stays mounted
+   beneath every foreground stage, including the collection selector. */
+.cinematic-experience {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow: hidden;
+  background: #020304;
+}
+.astro-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: #000;
+  transition: filter 1.8s cubic-bezier(.2,.7,.1,1), transform 1.8s cubic-bezier(.2,.7,.1,1);
+}
+.astro-observation,
+.astro-footage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.astro-observation {
+  z-index: 0;
+  filter: brightness(.82) contrast(1.08);
+  transform: scale(1.025);
+}
+.astro-footage {
+  z-index: 1;
+  opacity: 0;
+  transform: scale(1.035);
+  filter: brightness(.96) saturate(.94);
+  transition:
+    opacity 1.35s cubic-bezier(.22,.68,0,1),
+    transform 2.2s cubic-bezier(.16,1,.3,1),
+    filter 1.8s cubic-bezier(.2,.7,.1,1);
+  will-change: opacity, transform, filter;
+}
+.astro-footage.is-ready.is-active,
+.astro-footage.is-active { opacity: 1; transform: scale(1); }
+.astro-footage.is-ready:not(.is-active) { opacity: 0; }
+.astro-vignette {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, transparent 31%, rgba(0,0,0,.13) 67%, rgba(0,0,0,.58) 100%),
+    linear-gradient(180deg, rgba(0,0,0,.28), transparent 25%, transparent 72%, rgba(0,0,0,.45));
+  transition: background 1.7s ease;
+}
+.astro-credit, .astro-shot-label { z-index: 3; }
+.astro-mode-brand .astro-footage.is-active {
+  transform: scale(.79);
+  filter: brightness(.8) saturate(.9);
+  transition: transform 2.4s cubic-bezier(.16,1,.3,1), filter 1.8s ease, opacity 1.2s ease;
+}
+.astro-mode-brand .astro-vignette {
+  background:
+    radial-gradient(ellipse at center, rgba(0,0,0,.04) 0 12%, rgba(0,0,0,.14) 45%, rgba(0,0,0,.73) 100%),
+    linear-gradient(180deg, rgba(0,0,0,.48), transparent 34%, rgba(0,0,0,.58));
+}
+.astro-mode-categories .astro-footage.is-active {
+  transform: scale(1.075);
+  filter: blur(8px) brightness(.43) saturate(.68);
+  transition: transform 2s cubic-bezier(.2,.7,.1,1), filter 2s cubic-bezier(.2,.7,.1,1), opacity 1.2s ease;
+}
+.astro-mode-categories .astro-observation {
+  filter: blur(8px) brightness(.32) saturate(.65);
+  transform: scale(1.075);
+  transition: filter 2s ease, transform 2s ease;
+}
+.astro-mode-categories .astro-vignette {
+  background: rgba(0,0,0,.36);
+}
+.astro-mode-brand .astro-credit,
+.astro-mode-brand .astro-shot-label,
+.astro-mode-categories .astro-credit,
+.astro-mode-categories .astro-shot-label,
+.astro-mode-store .astro-credit,
+.astro-mode-store .astro-shot-label { opacity: 0; transition: opacity .7s ease; }
+
+/* Brand identity blooms out of the shrinking event horizon. */
+.cinematic-intro-ui {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  color: #f4f1ea;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 1.1s ease;
+}
+.cinematic-intro-ui.is-dismissed { opacity: 0; }
+.cinematic-corner-brand,
+.cinematic-bottom-note,
+.cinematic-skip {
+  position: absolute;
+  z-index: 2;
+  color: rgba(244,241,234,.64);
+  font: 500 8px var(--sans);
+  letter-spacing: .21em;
+  text-shadow: 0 1px 12px rgba(0,0,0,.7);
+}
+.cinematic-corner-brand { top: 35px; left: 4.2vw; }
+.cinematic-corner-brand span { padding: 0 8px; opacity: .5; }
+.cinematic-bottom-note { left: 4.2vw; bottom: 35px; letter-spacing: .15em; }
+.cinematic-skip {
+  top: 27px;
+  right: 4.2vw;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.cinematic-skip span { margin-left: 8px; font-size: 13px; }
+.cinematic-skip:hover { color: #fff; }
+.cinematic-brand-stack {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 1vh;
+  text-align: center;
+}
+.cinematic-brand-aura {
+  position: absolute;
+  width: clamp(118px,17vw,190px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(232,237,242,.45);
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(.08);
+  filter: blur(8px);
+}
+.is-revealed .cinematic-brand-aura {
+  animation: horizon-to-mark 2.15s cubic-bezier(.16,1,.3,1) both;
+}
+.cinematic-brand-mark {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(.06) rotate(-24deg);
+  filter: blur(20px) drop-shadow(0 0 26px rgba(235,240,246,.36));
+  transition:
+    opacity 1.35s ease,
+    transform 2.25s cubic-bezier(.16,1,.3,1),
+    filter 1.7s ease;
+}
+.is-revealed .cinematic-brand-mark {
+  opacity: 1;
+  transform: scale(1) rotate(0);
+  filter: blur(0) drop-shadow(0 0 23px rgba(235,240,246,.25));
+}
+.cinematic-brand-name,
+.cinematic-brand-line {
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transform: translateY(13px);
+  transition: opacity 1.2s ease, transform 1.2s cubic-bezier(.16,1,.3,1);
+}
+.cinematic-brand-name {
+  margin: 25px 0 0;
+  padding-left: .38em;
+  font: 500 clamp(18px,2.2vw,25px) var(--sans);
+  letter-spacing: .38em;
+}
+.cinematic-brand-line {
+  margin: 14px 0 0;
+  padding-left: .36em;
+  color: rgba(244,241,234,.77);
+  font: 400 clamp(9px,1vw,12px) var(--sans);
+  letter-spacing: .36em;
+  transition-delay: .28s;
+}
+.is-revealed .cinematic-brand-name,
+.is-revealed .cinematic-brand-line { opacity: 1; transform: translateY(0); }
+.is-revealed .cinematic-brand-line { transition-delay: .34s; }
+@keyframes horizon-to-mark {
+  0% { opacity: .82; transform: scale(.08); filter: blur(8px); }
+  58% { opacity: .65; transform: scale(1.28); filter: blur(1px); }
+  100% { opacity: 0; transform: scale(1.7); filter: blur(12px); }
+}
+
+/* Two editorial choices float above the softened, still-moving black hole. */
+.category-screen {
+  position: relative;
+  z-index: 5;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: 54px 1fr 40px;
+  gap: 10px;
+  padding: 24px 4.1vw 18px;
+  color: #f4f1eb;
+  background: transparent;
+  opacity: 0;
+  transform: translateY(12px);
+  animation: categories-arrive 1.25s cubic-bezier(.16,1,.3,1) .08s forwards;
+}
+@keyframes categories-arrive {
+  to { opacity: 1; transform: translateY(0); }
+}
+.category-screen-heading,
+.category-screen-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: rgba(244,241,234,.64);
+  font: 500 8px var(--sans);
+  letter-spacing: .2em;
+  text-shadow: 0 1px 12px rgba(0,0,0,.7);
+}
+.category-panels {
+  min-height: min(690px, calc(100vh - 150px));
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 13px;
+  transition: opacity .75s ease, transform .9s cubic-bezier(.16,1,.3,1), filter .8s ease;
+}
+.category-panel {
+  min-width: 0;
+  min-height: 100%;
+  height: auto;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 1px;
+  background: rgba(9,10,12,.24);
+  box-shadow: 0 18px 70px rgba(0,0,0,.14);
+  transition: border-color .6s ease, box-shadow .8s ease, transform .8s cubic-bezier(.16,1,.3,1), filter .8s ease;
+}
+.category-panel > img {
+  filter: saturate(.52) brightness(.61);
+  transform: scale(1.015);
+  transition: transform 1.8s cubic-bezier(.16,1,.3,1), filter 1.2s ease;
+}
+.category-panel .panel-shade {
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.24), rgba(0,0,0,.03) 34%, rgba(0,0,0,.12) 57%, rgba(0,0,0,.72)),
+    linear-gradient(0deg, rgba(0,0,0,.12), transparent);
+  transition: opacity .7s ease;
+}
+.panel-copy {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 0;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 30px;
+  transition: transform .9s cubic-bezier(.16,1,.3,1);
+}
+.panel-kicker {
+  margin-bottom: 16px;
+  color: rgba(255,255,255,.72);
+  font-size: 9px;
+  letter-spacing: .12em;
+  opacity: .86;
+  transition: opacity .5s ease, transform .7s ease;
+}
+.panel-title {
+  font: 400 clamp(38px,6.2vw,88px)/.92 var(--sans);
+  letter-spacing: -.075em;
+  text-shadow: 0 4px 28px rgba(0,0,0,.4);
+  transition: transform .8s cubic-bezier(.16,1,.3,1), letter-spacing .8s ease;
+}
+.panel-cta {
+  margin-top: 27px;
+  gap: 15px;
+  font-size: 8px;
+}
+.panel-meta {
+  top: 21px;
+  left: 23px;
+  right: 23px;
+  font-size: 7px;
+}
+.category-panel:hover,
+.category-panel:focus-visible {
+  border-color: rgba(255,255,255,.55);
+  box-shadow: 0 25px 90px rgba(0,0,0,.3);
+  transform: translateY(-3px);
+}
+.category-panel:hover > img,
+.category-panel:focus-visible > img {
+  transform: scale(1.075);
+  filter: saturate(.76) brightness(.82);
+}
+.category-panel:hover .panel-title,
+.category-panel:focus-visible .panel-title { letter-spacing: -.045em; transform: translateY(-3px); }
+.category-panel:hover .panel-kicker,
+.category-panel:focus-visible .panel-kicker { opacity: 1; transform: translateY(-2px); }
+.category-panels:has(.category-panel:hover) .category-panel:not(:hover),
+.category-panels:has(.category-panel:focus-visible) .category-panel:not(:focus-visible) {
+  filter: brightness(.66) saturate(.62);
+}
+.category-screen.is-leaving .category-panels {
+  opacity: 0;
+  filter: blur(5px);
+  transform: scale(.975);
+}
+.category-screen.is-leaving .category-screen-heading,
+.category-screen.is-leaving .category-screen-footer { opacity: 0; transition: opacity .35s ease; }
+.category-screen-footer { padding-top: 2px; font-size: 7px; }
+
+/* The chosen collection eases in over the same persistent scene. */
+.store-transition-in {
+  position: relative;
+  z-index: 6;
+  min-height: 100vh;
+  animation: storefront-arrive .9s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes storefront-arrive {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.astro-mode-store .astro-scene { filter: brightness(.38); }
+
+@media (max-width: 700px) {
+  .cinematic-corner-brand { top: 22px; left: 17px; font-size: 7px; }
+  .cinematic-skip { top: 16px; right: 17px; font-size: 7px; }
+  .cinematic-bottom-note { left: 17px; bottom: 22px; font-size: 6px; }
+  .cinematic-brand-mark svg { width: 82px !important; height: 82px !important; }
+  .cinematic-brand-name { font-size: 16px; letter-spacing: .28em; padding-left: .28em; }
+  .cinematic-brand-line { font-size: 8px; letter-spacing: .22em; padding-left: .22em; }
+  .category-screen {
+    grid-template-rows: 44px 1fr 27px;
+    gap: 9px;
+    padding: 15px 13px 10px;
+  }
+  .category-screen-heading { font-size: 6px; letter-spacing: .12em; }
+  .category-screen-footer { font-size: 6px; letter-spacing: .12em; }
+  .category-panels {
+    min-height: calc(100svh - 105px);
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 9px;
+  }
+  .category-panel { min-height: 0; }
+  .panel-meta { top: 13px; left: 13px; right: 13px; font-size: 6px; }
+  .panel-title { font-size: clamp(43px,12vw,63px); }
+  .panel-kicker { margin-bottom: 10px; font-size: 8px; }
+  .panel-cta { margin-top: 16px; font-size: 7px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .astro-footage { display: none; }
+  .astro-observation { filter: brightness(.72); transform: none; }
+  .category-screen, .store-transition-in { animation: none; opacity: 1; transform: none; }
+  .cinematic-brand-aura { animation: none !important; }
+  .cinematic-brand-mark, .cinematic-brand-name, .cinematic-brand-line {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+}
