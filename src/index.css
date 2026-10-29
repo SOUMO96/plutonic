@@ -727,3 +727,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
     transition: none;
   }
 }
+
+.astro-observation {
+  opacity: 1;
+  transition: opacity 1.3s ease, filter 1.8s ease, transform 1.8s ease;
+}
+.astro-observation.is-receded { opacity: 0; }
+.astro-observation.is-visible { opacity: 1; }
+.cinematic-experience.mode-store { overflow: visible; }
