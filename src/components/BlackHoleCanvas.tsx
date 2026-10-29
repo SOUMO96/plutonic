@@ -185,7 +185,9 @@ export default function BlackHoleCanvas({ reducedMotion = false }: BlackHoleCanv
       return x * x * (3 - 2 * x);
     };
 
+    let running = true;
     const render = (now: number) => {
+      if (!running) return;
       frame = requestAnimationFrame(render);
       if (document.hidden || now - lastFrame < frameInterval) return;
       lastFrame = now;
@@ -199,6 +201,18 @@ export default function BlackHoleCanvas({ reducedMotion = false }: BlackHoleCanv
       renderer.render(scene, camera);
     };
 
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        running = false;
+        cancelAnimationFrame(frame);
+      } else if (!reducedMotion) {
+        running = true;
+        lastFrame = 0;
+        frame = requestAnimationFrame(render);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     if (reducedMotion) {
       uniforms.uTime.value = 1.2;
       renderer.render(scene, camera);
@@ -207,7 +221,9 @@ export default function BlackHoleCanvas({ reducedMotion = false }: BlackHoleCanv
     }
 
     return () => {
+      running = false;
       cancelAnimationFrame(frame);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       observer.disconnect();
       mount.removeEventListener('pointermove', onPointer);
       scene.remove(plane);
