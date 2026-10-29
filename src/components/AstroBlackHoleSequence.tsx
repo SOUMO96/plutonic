@@ -69,12 +69,6 @@ export default function AstroBlackHoleSequence({
   }, [activeClip, reducedMotion]);
 
   useEffect(() => {
-    if (reducedMotion) return;
-    const timer = window.setTimeout(() => setShowObservation(false), 1800);
-    return () => window.clearTimeout(timer);
-  }, [reducedMotion]);
-
-  useEffect(() => {
     if (reducedMotion && !revealSent.current) {
       const timer = window.setTimeout(() => {
         revealSent.current = true;
@@ -93,6 +87,7 @@ export default function AstroBlackHoleSequence({
   const handleCanPlay = (index: number) => {
     setVideoAvailable((current) => current.map((value, i) => i === index ? true : value));
     if (index === activeClip) {
+      setShowObservation(false);
       videoRefs.current[index]?.play().catch(() => undefined);
     }
   };
@@ -112,6 +107,7 @@ export default function AstroBlackHoleSequence({
 
   const handleVideoError = (index: number) => {
     if (index !== activeClip) return;
+    setShowObservation(true);
     if (index < CLIPS.length - 1) {
       advanceLocked.current = true;
       setActiveClip(index + 1);
