@@ -921,3 +921,116 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
   filter: blur(8px) brightness(.32) contrast(1.12) saturate(.9);
 }
 .astro-mode-intro .astro-photon-ring { opacity: .8; }
+
+
+/* PLUTONIC identity reveal: particles resolve into the supplied logo asset. */
+.plutonic-logo-reveal {
+  position: fixed;
+  z-index: 6;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.logo-morph-particles {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity .55s ease;
+}
+.plutonic-logo-reveal.is-active .logo-morph-particles { opacity: 1; }
+.plutonic-final-logo {
+  position: relative;
+  display: block;
+  width: min(66vw, 390px);
+  max-height: 62vh;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  opacity: 0;
+  transform: scale(.965);
+  filter: drop-shadow(0 0 18px rgba(255,255,255,.08));
+  transition: opacity .95s ease, transform 1.35s cubic-bezier(.16,1,.3,1);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.plutonic-logo-reveal.is-complete .plutonic-final-logo {
+  opacity: 1;
+  transform: scale(1);
+}
+.plutonic-punchline {
+  position: absolute;
+  top: calc(50% + min(34vw, 205px));
+  left: 0;
+  right: 0;
+  margin: 0;
+  color: rgba(255,255,255,.88);
+  text-align: center;
+  font: 400 10px var(--sans);
+  letter-spacing: .34em;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity .9s ease .5s, transform .9s ease .5s;
+}
+.plutonic-logo-reveal.is-complete .plutonic-punchline {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Final camera push-in: the approved pullback footage recedes to black as
+   its light converges into the logo-driven particle field. */
+@keyframes black-hole-to-logo-push {
+  0% {
+    transform: rotate(31deg) scale(1.42);
+    filter: brightness(.96) contrast(1.12) saturate(1.08);
+    opacity: 1;
+  }
+  56% {
+    transform: rotate(31deg) scale(1.88);
+    filter: brightness(.62) contrast(1.18) saturate(.86) blur(1px);
+    opacity: .94;
+  }
+  100% {
+    transform: rotate(31deg) scale(2.35);
+    filter: brightness(.07) contrast(1.2) saturate(.45) blur(7px);
+    opacity: 0;
+  }
+}
+.astro-mode-brand .astro-footage.is-active {
+  animation: black-hole-to-logo-push 3.4s cubic-bezier(.18,.78,.16,1) both;
+  transition: none;
+}
+@keyframes photon-ring-to-logo {
+  0% { opacity: .82; transform: translate(-50%,-50%) scale(.76); filter: blur(0); }
+  55% { opacity: .62; transform: translate(-50%,-50%) scale(.48); filter: blur(1px); }
+  100% { opacity: 0; transform: translate(-50%,-50%) scale(.12); filter: blur(8px); }
+}
+.astro-mode-brand .astro-photon-ring {
+  animation: photon-ring-to-logo 3.4s cubic-bezier(.18,.78,.16,1) both;
+}
+.astro-mode-brand .astro-vignette {
+  background: #000;
+  transition: background 2.6s ease;
+}
+.astro-mode-brand .astro-observation {
+  opacity: 0;
+  filter: brightness(0);
+}
+
+@media (max-width: 700px) {
+  .plutonic-final-logo { width: min(78vw, 330px); max-height: 58vh; }
+  .plutonic-punchline {
+    top: calc(50% + min(39vw, 170px));
+    font-size: 8px;
+    letter-spacing: .24em;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-morph-particles { display: none; }
+  .plutonic-final-logo { opacity: 1; transform: none; transition: none; }
+  .astro-mode-brand .astro-footage.is-active { animation: none; opacity: 0; }
+  .astro-mode-brand .astro-photon-ring { animation: none; opacity: 0; }
+}
