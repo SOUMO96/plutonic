@@ -4,23 +4,12 @@ export type AstroSceneMode = 'intro' | 'brand' | 'categories' | 'store';
 
 const EHT_OBSERVATION = 'https://cdn.eso.org/images/large/eso1907a.jpg';
 
-const CLIPS = [
-  {
-    label: 'CLOSE APPROACH',
-    src: 'https://svs.gsfc.nasa.gov/vis/a010000/a014600/a014619/4-Black_hole_up_close-HD.mp4',
-    cutAt: 5.0,
-  },
-  {
-    label: 'PULLBACK',
-    src: 'https://svs.gsfc.nasa.gov/vis/a010000/a014600/a014619/3-Pulling_back_from_a_black_hole-HD.mp4',
-    cutAt: 7.5,
-  },
-  {
-    label: 'ORBIT',
-    src: 'https://svs.gsfc.nasa.gov/vis/a010000/a014600/a014619/2-Orbiting_a_black_hole-HD.mp4',
-    cutAt: 9.5,
-  },
-] as const;
+// Keep only the second NASA sequence: the continuous camera pullback.
+const CLIP = {
+  label: 'PULLBACK',
+  src: 'https://svs.gsfc.nasa.gov/vis/a010000/a014600/a014619/3-Pulling_back_from_a_black_hole-HD.mp4',
+  revealAt: 7.5,
+} as const;
 
 type Props = {
   mode: AstroSceneMode;
@@ -30,49 +19,27 @@ type Props = {
 
 /**
  * Persistent astrophysical background. The EHT M87* image is the observational
- * reference / fallback; the moving shots are NASA/JPL-Caltech simulations.
- * Keeping this component mounted lets the same footage continue beneath the
- * logo and category layers without replacing the background.
+ * fallback; the one moving shot is NASA/JPL-Caltech's black-hole pullback
+ * simulation. The same video remains mounted behind the logo and category layers.
  */
 export default function AstroBlackHoleSequence({
   mode,
   reducedMotion = false,
   onBrandReveal,
 }: Props) {
-  const videoRefs = useRef<Array<HTMLVideoElement | null>>([]);
-  const [activeClip, setActiveClip] = useState(0);
-  const [videoAvailable, setVideoAvailable] = useState<boolean[]>([false, false, false]);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoAvailable, setVideoAvailable] = useState(false);
   const [showObservation, setShowObservation] = useState(true);
-  const activeClipRef = useRef(0);
-  const advanceLocked = useRef(false);
   const revealSent = useRef(false);
-
-  activeClipRef.current = activeClip;
 
   useEffect(() => {
     if (reducedMotion) return;
-    const active = videoRefs.current[activeClip];
-    if (!active) return;
-
-    videoRefs.current.forEach((video, index) => {
-      if (!video || index === activeClip) return;
-      // Let the previous shot finish its opacity crossfade before pausing it.
-      window.setTimeout(() => {
-        if (index !== activeClipRef.current) video.pause();
-      }, 1250);
+    const video = videoRef.current;
+    if (!video) return;
+    video.play().catch(() => {
+      // If autoplay is denied, the EHT observation stays visible as fallback.
     });
-
-    active.currentTime = 0;
-    active.play().catch(() => {
-      // If autoplay is denied, the EHT observation remains visible underneath.
-    });
-  }, [activeClip, reducedMotion]);
-
-  useEffect(() => {
-    if (!reducedMotion && videoAvailable[activeClip]) {
-      setShowObservation(false);
-    }
-  }, [activeClip, videoAvailable, reducedMotion]);
+  }, [reducedMotion]);
 
   useEffect(() => {
     if (reducedMotion && !revealSent.current) {
@@ -90,41 +57,26 @@ export default function AstroBlackHoleSequence({
     onBrandReveal();
   };
 
-  const handleCanPlay = (index: number) => {
-    setVideoAvailable((current) => current.map((value, i) => i === index ? true : value));
-    if (index === activeClip) {
-      setShowObservation(false);
-      videoRefs.current[index]?.play().catch(() => undefined);
-    }
+  const handleCanPlay = () => {
+    setVideoAvailable(true);
+    setShowObservation(false);
+    videoRef.current?.play().catch(() => undefined);
   };
 
-  const handleTimeUpdate = (index: number, event: SyntheticEvent<HTMLVideoElement>) => {
-    if (index !== activeClip || advanceLocked.current) return;
-    if (event.currentTarget.currentTime < CLIPS[index].cutAt) return;
-
-    advanceLocked.current = true;
-    if (index < CLIPS.length - 1) {
-      setActiveClip(index + 1);
-      window.setTimeout(() => { advanceLocked.current = false; }, 1400);
-    } else {
+  const handleTimeUpdate = (event: SyntheticEvent<HTMLVideoElement>) => {
+    if (event.currentTarget.currentTime >= CLIP.revealAt) {
       signalBrandReveal();
     }
   };
 
-  const handleVideoError = (index: number) => {
-    if (index !== activeClip) return;
+  const handleVideoError = () => {
     setShowObservation(true);
-    if (index < CLIPS.length - 1) {
-      advanceLocked.current = true;
-      setActiveClip(index + 1);
-      window.setTimeout(() => { advanceLocked.current = false; }, 1400);
-    } else {
-      signalBrandReveal();
-    }
+    // Do not leave the visitor on a loading screen if NASA media is unavailable.
+    signalBrandReveal();
   };
 
   return (
-    <div className={`astro-scene astro-mode-${mode}`} aria-label="EHT observation and NASA black-hole simulation">
+    <div className={`astro-scene astro-mode-${mode}`} aria-label="EHT observation and NASA black-hole pullback simulation">
       <img
         className={'astro-observation ' + (showObservation ? 'is-visible' : 'is-receded')}
         src={EHT_OBSERVATION}
@@ -132,31 +84,30 @@ export default function AstroBlackHoleSequence({
         fetchPriority="high"
         aria-hidden="true"
       />
-      {!reducedMotion && CLIPS.map((clip, index) => (
+      {!reducedMotion && (
         <video
-          key={clip.src}
-          ref={(node) => { videoRefs.current[index] = node; }}
-          className={`astro-footage ${activeClip === index ? 'is-active' : ''} ${videoAvailable[index] ? 'is-ready' : ''}`}
-          src={clip.src}
+          ref={videoRef}
+          className={`astro-footage is-active ${videoAvailable ? 'is-ready' : ''}`}
+          src={CLIP.src}
           poster={EHT_OBSERVATION}
           muted
           playsInline
-          autoPlay={index === 0}
-          preload={index === activeClip || index === activeClip + 1 ? 'auto' : 'metadata'}
-          loop={index === CLIPS.length - 1}
-          onCanPlay={() => handleCanPlay(index)}
-          onTimeUpdate={(event) => handleTimeUpdate(index, event)}
-          onError={() => handleVideoError(index)}
+          autoPlay
+          preload="auto"
+          loop
+          onCanPlay={handleCanPlay}
+          onTimeUpdate={handleTimeUpdate}
+          onError={handleVideoError}
           aria-hidden="true"
         />
-      ))}
+      )}
       <div className="astro-vignette" />
       <div className="astro-credit">
         <span>OBSERVATION · EHT COLLABORATION · M87*</span>
         <span>SIMULATION · NASA / JPL-CALTECH · SIMPLIFIED OPTICAL MODEL</span>
       </div>
       <span className="astro-shot-label">
-        {reducedMotion ? 'M87* / EHT OBSERVATION' : CLIPS[activeClip].label}
+        {reducedMotion ? 'M87* / EHT OBSERVATION' : CLIP.label}
       </span>
     </div>
   );
