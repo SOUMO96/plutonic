@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import BlackHoleCanvas from './components/BlackHoleCanvas';
 import BrandMark from './components/BrandMark';
 import CategorySelect from './components/CategorySelect';
@@ -58,10 +58,10 @@ export default function App() {
     return () => media.removeEventListener?.('change', update);
   }, []);
 
-  const finishIntro = () => {
+  const finishIntro = useCallback(() => {
     window.sessionStorage.setItem('plutonic-intro-seen', 'yes');
     setStage('categories');
-  };
+  }, []);
 
   return (
     <div className="site-shell">
