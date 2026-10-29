@@ -101,7 +101,6 @@ export default function AstroBlackHoleSequence({
           aria-hidden="true"
         />
       )}
-      <div className="astro-photon-ring" aria-hidden="true" />
       <div className="astro-vignette" />
       <div className="astro-credit">
         <span>OBSERVATION · EHT COLLABORATION · M87*</span>
