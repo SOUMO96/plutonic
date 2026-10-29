@@ -5,16 +5,15 @@ type Props = {
   reducedMotion?: boolean;
 };
 
-const LOGO_SRC = '/plutonic-logo.svg';
+const LOGO_SRC = '/plutonic-logo.webp';
 
-// Leave this empty until the final approved brand line is supplied.
+// Keep empty until the approved brand punchline is supplied.
 const BRAND_PUNCHLINE = '';
 
 /**
- * A single-source logo reveal.
- * The uploaded PLUTONIC artwork includes both its symbol and wordmark, so it
- * must be rendered exactly once. No generated SVG, duplicate wordmark or
- * particle canvas is layered over it.
+ * The supplied artwork already contains the complete orbital symbol and
+ * PLUTONIC wordmark. Render this one image exactly once. No SVG recreation,
+ * particle layer, duplicate type, or decorative orbit is placed over it.
  */
 export default function PlutonicLogoReveal({ active, reducedMotion = false }: Props) {
   const [visible, setVisible] = useState(false);
@@ -24,18 +23,24 @@ export default function PlutonicLogoReveal({ active, reducedMotion = false }: Pr
       setVisible(false);
       return;
     }
+
     if (reducedMotion) {
       setVisible(true);
       return;
     }
 
-    // This delay synchronizes the logo crossfade with the end of the video push-in.
-    const timer = window.setTimeout(() => setVisible(true), 2350);
+    // The video begins its final camera push-in when the intro enters brand mode.
+    // Start a single image crossfade late in that push-in, so the two images
+    // overlap briefly without showing two readable logos at once.
+    const timer = window.setTimeout(() => setVisible(true), 2550);
     return () => window.clearTimeout(timer);
   }, [active, reducedMotion]);
 
   return (
-    <div className={`plutonic-logo-reveal ${active ? 'is-active' : ''} ${visible ? 'is-visible' : ''}`}>
+    <div
+      className={`plutonic-logo-reveal ${active ? 'is-active' : ''} ${visible ? 'is-visible' : ''}`}
+      aria-live="polite"
+    >
       <img
         className="plutonic-final-logo"
         src={LOGO_SRC}
