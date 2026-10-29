@@ -788,3 +788,119 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
 @media (prefers-reduced-motion: reduce) {
   .astro-observation { filter: grayscale(1) brightness(1.08) contrast(1.42); }
 }
+
+
+/* Final reference match: tilt is applied from the very first video frame.
+   Keep the plasma warm; only the photon ring receives a white highlight. */
+.astro-scene {
+  background: #000;
+}
+.astro-observation {
+  filter: brightness(.8) contrast(1.12) saturate(1.04);
+  transform: scale(1.025);
+  background: #000;
+}
+.astro-footage,
+.astro-footage.is-active {
+  transform-origin: 50% 50%;
+  transform: rotate(31deg) scale(1.42);
+  filter: brightness(.96) contrast(1.12) saturate(1.08);
+  background: #000;
+  transition: opacity 1.25s ease;
+  object-fit: cover;
+  object-position: center;
+}
+.astro-mode-intro .astro-footage.is-active {
+  /* No transform transition here: the video never appears flat first. */
+  transform: rotate(31deg) scale(1.42);
+  transition: opacity 1.25s ease;
+}
+.astro-footage.is-active:not(.is-ready) { opacity: 0; }
+.astro-footage.is-ready.is-active { opacity: 1; }
+
+.astro-photon-ring {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 48%;
+  width: min(34vw, 420px, 44vh);
+  aspect-ratio: .88 / 1;
+  border: 1.25px solid rgba(255,255,255,.94);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  box-shadow:
+    0 0 2px rgba(255,255,255,.95),
+    0 0 8px rgba(255,255,255,.55),
+    0 0 20px rgba(255,255,255,.2),
+    inset 0 0 5px rgba(255,255,255,.2);
+  transform: translate(-50%,-50%) scale(1.08);
+}
+.astro-photon-ring::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: inherit;
+  filter: blur(2px);
+}
+.astro-scene.has-footage .astro-photon-ring {
+  opacity: .86;
+  animation: photon-ring-pullback 7.5s cubic-bezier(.2,.7,.1,1) both;
+}
+@keyframes photon-ring-pullback {
+  0% { transform: translate(-50%,-50%) scale(1.08); opacity: .92; }
+  100% { transform: translate(-50%,-50%) scale(.76); opacity: .78; }
+}
+.astro-mode-brand .astro-photon-ring {
+  animation: none;
+  opacity: .72;
+  transform: translate(-50%,-50%) scale(.76);
+}
+.astro-mode-categories .astro-photon-ring,
+.astro-mode-store .astro-photon-ring {
+  opacity: .18;
+  filter: blur(8px);
+  transform: translate(-50%,-50%) scale(.76);
+}
+.astro-mode-brand .astro-footage.is-active {
+  transform: rotate(31deg) scale(1.18);
+  filter: brightness(.82) contrast(1.12) saturate(1.08);
+}
+.astro-mode-categories .astro-footage.is-active {
+  transform: rotate(31deg) scale(1.48);
+  filter: blur(8px) brightness(.42) contrast(1.12) saturate(.92);
+}
+.astro-mode-categories .astro-observation {
+  filter: blur(8px) brightness(.32) contrast(1.12) saturate(.9);
+  transform: scale(1.075);
+}
+.astro-mode-store .astro-footage.is-active {
+  transform: rotate(31deg) scale(1.48);
+  filter: blur(4px) brightness(.34) contrast(1.1) saturate(.9);
+}
+@media (max-width: 700px) {
+  .astro-footage,
+  .astro-footage.is-active,
+  .astro-mode-intro .astro-footage.is-active {
+    transform: rotate(31deg) scale(1.54);
+  }
+  .astro-mode-brand .astro-footage.is-active {
+    transform: rotate(31deg) scale(1.28);
+  }
+  .astro-mode-categories .astro-footage.is-active,
+  .astro-mode-store .astro-footage.is-active {
+    transform: rotate(31deg) scale(1.66);
+  }
+  .astro-photon-ring {
+    width: min(35vw, 250px, 36vh);
+    top: 47%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .astro-observation { filter: brightness(.8) contrast(1.12); }
+  .astro-footage,
+  .astro-footage.is-active { filter: brightness(.96) contrast(1.12) saturate(1.08); }
+  .astro-photon-ring { opacity: .9; animation: none !important; transform: translate(-50%,-50%) scale(1); }
+}
