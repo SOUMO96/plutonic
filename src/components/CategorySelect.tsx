@@ -1,6 +1,10 @@
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 
-type Props = { onSelect: (category: 'him' | 'her') => void };
+type Category = 'him' | 'her';
+type Props = {
+  onSelect: (category: Category) => void;
+  isLeaving?: boolean;
+};
 
 const collections = [
   {
@@ -21,19 +25,14 @@ const collections = [
   },
 ];
 
-export default function CategorySelect({ onSelect }: Props) {
+export default function CategorySelect({ onSelect, isLeaving = false }: Props) {
   return (
-    <main className="category-screen">
-      <div className="category-topline">
+    <section className={`category-screen ${isLeaving ? 'is-leaving' : ''}`} aria-label="Choose a collection">
+      <div className="category-screen-heading">
         <span>PLUTONIC / THE COLLECTION</span>
-        <span>CHOOSE YOUR UNIVERSE <i>—</i> 01 / 02</span>
+        <span>CHOOSE YOUR UNIVERSE</span>
       </div>
-      <section className="category-intro">
-        <p className="eyebrow">A NEW GRAVITY IN EVERYDAY DRESS</p>
-        <h1>FIND YOUR<br /><em>ORBIT.</em></h1>
-        <p className="category-intro-note">Two expressions. One point of view.</p>
-      </section>
-      <section className="category-panels" aria-label="Choose a collection">
+      <div className="category-panels">
         {collections.map((item) => (
           <button
             key={item.id}
@@ -44,20 +43,22 @@ export default function CategorySelect({ onSelect }: Props) {
           >
             <img src={item.image} alt="" style={{ objectPosition: item.position }} />
             <span className="panel-shade" />
-            <span className="panel-meta"><span>COLLECTION {item.number}</span><span>PLUTONIC / 2026</span></span>
+            <span className="panel-meta">
+              <span>COLLECTION {item.number}</span>
+              <span>PLUTONIC / 2026</span>
+            </span>
             <span className="panel-copy">
               <span className="panel-kicker">{item.subtitle}</span>
               <span className="panel-title">{item.title}</span>
               <span className="panel-cta">EXPLORE COLLECTION <ArrowUpRight size={16} strokeWidth={1.5} /></span>
             </span>
-            <span className="panel-corner"><ArrowDownRight size={20} strokeWidth={1.2} /></span>
           </button>
         ))}
-      </section>
-      <footer className="category-footer">
+      </div>
+      <div className="category-screen-footer">
         <span>DESIGNED TO MOVE WITH YOU.</span>
-        <span>SCROLL LESS. EXPERIENCE MORE.</span>
-      </footer>
-    </main>
+        <span>BEYOND THE ORDINARY.</span>
+      </div>
+    </section>
   );
 }
