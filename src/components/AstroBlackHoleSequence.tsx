@@ -105,6 +105,7 @@ export default function AstroBlackHoleSequence({
           onEnded={handleEnded}
           onTimeUpdate={handleTimeUpdate}
           onError={handleError}
+          loop={clipIndex === 2}
           aria-hidden="true"
         >
           <source src={current.uhd} type="video/mp4" media="(min-width: 1600px)" />
@@ -115,7 +116,7 @@ export default function AstroBlackHoleSequence({
       <div className="astro-vignette" />
       <div className="astro-credit">
         <span>OBSERVATION · EHT COLLABORATION · M87*</span>
-        <span>SIMULATION · NASA / JPL-CALTECH / R. HURT (IPAC)</span>
+        <span>SIMULATION · NASA / JPL-CALTECH · SIMPLIFIED OPTICAL MODEL</span>
       </div>
       <span className="astro-shot-label">{reducedMotion ? 'M87* / EHT OBSERVATION' : current.label}</span>
     </div>
