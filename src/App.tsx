@@ -60,7 +60,7 @@ export default function App() {
     const timer = window.setTimeout(() => {
       window.sessionStorage.setItem('plutonic-intro-seen', 'yes');
       setStage('categories');
-    }, 5200);
+    }, 8000);
     return () => window.clearTimeout(timer);
   }, [stage, brandReveal]);
 
