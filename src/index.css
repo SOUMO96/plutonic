@@ -735,3 +735,56 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
 .astro-observation.is-receded { opacity: 0; }
 .astro-observation.is-visible { opacity: 1; }
 .cinematic-experience.mode-store { overflow: visible; }
+
+
+/* Reference-matched black-hole treatment:
+   tilt the accretion plane diagonally, keep deep space black, and convert
+   the orange/amber plasma to a restrained silver-white monochrome. */
+.astro-scene {
+  background: #000;
+}
+.astro-observation {
+  filter: grayscale(1) brightness(1.08) contrast(1.42);
+  background: #000;
+}
+.astro-footage,
+.astro-footage.is-active {
+  transform: rotate(36deg) scale(1.46);
+  filter: grayscale(1) brightness(1.04) contrast(1.48);
+  background: #000;
+  object-fit: cover;
+  object-position: center;
+}
+.astro-mode-brand .astro-footage.is-active {
+  transform: rotate(36deg) scale(1.22);
+  filter: grayscale(1) brightness(.98) contrast(1.5);
+}
+.astro-mode-categories .astro-footage.is-active {
+  transform: rotate(36deg) scale(1.5);
+  filter: grayscale(1) blur(8px) brightness(.37) contrast(1.48);
+}
+.astro-mode-categories .astro-observation {
+  filter: grayscale(1) blur(8px) brightness(.3) contrast(1.5);
+  transform: rotate(36deg) scale(1.5);
+}
+.astro-mode-store .astro-footage.is-active {
+  transform: rotate(36deg) scale(1.5);
+  filter: grayscale(1) blur(4px) brightness(.34) contrast(1.48);
+}
+@media (max-width: 700px) {
+  .astro-footage,
+  .astro-footage.is-active {
+    transform: rotate(36deg) scale(1.55);
+  }
+  .astro-mode-brand .astro-footage.is-active {
+    transform: rotate(36deg) scale(1.3);
+  }
+  .astro-mode-categories .astro-footage.is-active,
+  .astro-mode-store .astro-footage.is-active,
+  .astro-mode-categories .astro-observation {
+    transform: rotate(36deg) scale(1.65);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .astro-observation { filter: grayscale(1) brightness(1.08) contrast(1.42); }
+}
