@@ -21,7 +21,7 @@ function CinematicIntro({ reducedMotion, onFinish }: { reducedMotion: boolean; o
       window.setTimeout(() => setPhase(3), 9000),
       window.setTimeout(onFinish, 10800),
     ];
-    return () => timers.forEach(window.clearTimeout);
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [reducedMotion, onFinish]);
 
   return (
