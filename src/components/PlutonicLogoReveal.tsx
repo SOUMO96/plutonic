@@ -29,10 +29,10 @@ export default function PlutonicLogoReveal({ active, reducedMotion = false }: Pr
       return;
     }
 
-    // The video begins its final camera push-in when the intro enters brand mode.
-    // Start a single image crossfade late in that push-in, so the two images
-    // overlap briefly without showing two readable logos at once.
-    const timer = window.setTimeout(() => setVisible(true), 2550);
+    // The background completes its push-in and fades to pure black in 3.4s.
+    // Reveal the full-frame logo only after that, preventing the old video
+    // from showing through its near-black source background and doubling it.
+    const timer = window.setTimeout(() => setVisible(true), 3550);
     return () => window.clearTimeout(timer);
   }, [active, reducedMotion]);
 
