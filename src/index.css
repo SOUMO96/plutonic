@@ -1034,3 +1034,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
   .astro-mode-brand .astro-footage.is-active { animation: none; opacity: 0; }
   .astro-mode-brand .astro-photon-ring { animation: none; opacity: 0; }
 }
+
+/* During the final identity lockup, leave only the supplied mark and editable line. */
+.cinematic-intro-ui.is-revealed .cinematic-corner-brand,
+.cinematic-intro-ui.is-revealed .cinematic-bottom-note {
+  opacity: 0;
+  transition: opacity .8s ease;
+}
