@@ -7,9 +7,17 @@ import Storefront from './components/Storefront';
 type Stage = 'intro' | 'categories' | 'store';
 type Category = 'him' | 'her';
 
-function CinematicIntro({ revealed, onSkip }: { revealed: boolean; onSkip: () => void }) {
+function CinematicIntro({
+  revealed,
+  dismissed = false,
+  onSkip,
+}: {
+  revealed: boolean;
+  dismissed?: boolean;
+  onSkip: () => void;
+}) {
   return (
-    <div className={`cinematic-intro-ui ${revealed ? 'is-revealed' : ''}`}>
+    <div className={`cinematic-intro-ui ${revealed ? 'is-revealed' : ''} ${dismissed ? 'is-dismissed' : ''}`}>
       <div className="cinematic-corner-brand">PLUTONIC <span>—</span> AN EXPRESSION IN MOTION</div>
       <div className="cinematic-brand-stack" aria-live="polite">
         <div className="cinematic-brand-aura" />
@@ -17,7 +25,7 @@ function CinematicIntro({ revealed, onSkip }: { revealed: boolean; onSkip: () =>
         <p className="cinematic-brand-name">PLUTONIC</p>
         <p className="cinematic-brand-line">BEYOND THE ORDINARY.</p>
       </div>
-      <button className="cinematic-skip" onClick={onSkip}>SKIP INTRO <span>↗</span></button>
+      {!dismissed && <button className="cinematic-skip" onClick={onSkip}>SKIP INTRO <span>↗</span></button>}
       <div className="cinematic-bottom-note">M87* / A STUDY IN GRAVITY</div>
     </div>
   );
@@ -46,9 +54,7 @@ export default function App() {
     if (transitionTimer.current !== null) window.clearTimeout(transitionTimer.current);
   }, []);
 
-  const beginBrandReveal = useCallback(() => {
-    setBrandReveal(true);
-  }, []);
+  const beginBrandReveal = useCallback(() => setBrandReveal(true), []);
 
   useEffect(() => {
     if (stage !== 'intro' || !brandReveal) return;
@@ -74,26 +80,34 @@ export default function App() {
     }, 650);
   }, []);
 
+  const mode: AstroSceneMode = stage === 'intro'
+    ? brandReveal ? 'brand' : 'intro'
+    : stage;
+
   return (
     <div className="site-shell">
-      {stage !== 'store' && (
-        <main className={`cinematic-experience mode-${stage === 'categories' ? 'categories' : brandReveal ? 'brand' : 'intro'}`}>
-          <AstroBlackHoleSequence
-            mode={stage === 'categories' ? 'categories' : brandReveal ? 'brand' : 'intro'}
-            reducedMotion={reducedMotion}
-            onBrandReveal={beginBrandReveal}
+      <main className={`cinematic-experience mode-${mode}`}>
+        <AstroBlackHoleSequence
+          mode={mode}
+          reducedMotion={reducedMotion}
+          onBrandReveal={beginBrandReveal}
+        />
+        {stage !== 'store' && (
+          <CinematicIntro
+            revealed={brandReveal}
+            dismissed={stage === 'categories'}
+            onSkip={skipIntro}
           />
-          {stage === 'intro' && <CinematicIntro revealed={brandReveal} onSkip={skipIntro} />}
-          {stage === 'categories' && (
-            <CategorySelect onSelect={enterCollection} isLeaving={categoryLeaving} />
-          )}
-        </main>
-      )}
-      {stage === 'store' && (
-        <div className="store-transition-in">
-          <Storefront category={category} onChangeCategory={() => setStage('categories')} />
-        </div>
-      )}
+        )}
+        {stage === 'categories' && (
+          <CategorySelect onSelect={enterCollection} isLeaving={categoryLeaving} />
+        )}
+        {stage === 'store' && (
+          <div className="store-transition-in">
+            <Storefront category={category} onChangeCategory={() => setStage('categories')} />
+          </div>
+        )}
+      </main>
     </div>
   );
 }
