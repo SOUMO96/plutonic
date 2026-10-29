@@ -904,3 +904,20 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
   .astro-footage.is-active { filter: brightness(.96) contrast(1.12) saturate(1.08); }
   .astro-photon-ring { opacity: .9; animation: none !important; transform: translate(-50%,-50%) scale(1); }
 }
+
+
+/* Match the opening EHT fallback to the tilted moving plate from frame one. */
+.astro-observation {
+  transform: rotate(31deg) scale(1.42);
+  transform-origin: 50% 50%;
+  filter: brightness(.8) contrast(1.12) saturate(1.04);
+}
+.astro-mode-brand .astro-observation {
+  transform: rotate(31deg) scale(1.18);
+}
+.astro-mode-categories .astro-observation,
+.astro-mode-store .astro-observation {
+  transform: rotate(31deg) scale(1.48);
+  filter: blur(8px) brightness(.32) contrast(1.12) saturate(.9);
+}
+.astro-mode-intro .astro-photon-ring { opacity: .8; }
