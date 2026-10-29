@@ -61,8 +61,17 @@ export default function AstroBlackHoleSequence({
     }
   };
 
+  // Use selected excerpts from each NASA master rather than forcing visitors
+  // to wait through the full source reels before reaching the brand reveal.
   const handleTimeUpdate = (event: SyntheticEvent<HTMLVideoElement>) => {
-    if (clipIndex === CLIPS.length - 1 && event.currentTarget.currentTime >= 9) {
+    const time = event.currentTarget.currentTime;
+    if (clipIndex === 0 && time >= 4.5) {
+      setVideoReady(false);
+      setClipIndex(1);
+    } else if (clipIndex === 1 && time >= 7) {
+      setVideoReady(false);
+      setClipIndex(2);
+    } else if (clipIndex === 2 && time >= 10) {
       finishOnce();
     }
   };
