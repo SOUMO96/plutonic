@@ -1,6 +1,6 @@
 # PLUTONIC — Beyond the Ordinary
 
-A cinematic, dark editorial storefront concept built with React 19, Vite, TypeScript, and Three.js.
+A cinematic, dark editorial storefront concept built with React 19, Vite, and TypeScript.
 
 ## Run locally
 
@@ -13,17 +13,25 @@ npm run dev
 
 Create a production build with `npm run build`. Run TypeScript checks with `npm run lint`.
 
-## Experience flow
+## Opening sequence
 
-1. **Cinematic intro** — procedural WebGL black-hole scene, orbital placeholder mark, wordmark, and tagline.
-2. **Collection gateway** — full-bleed editorial panels for **FOR HIM** and **FOR HER**.
-3. **Storefront** — category-specific sample products, type filters, search, wishlist toggles, and a front-end shopping bag.
+1. Opens on the Event Horizon Telescope Collaboration's M87* observation.
+2. Transitions into NASA/JPL-Caltech simulation footage for a close-up, pullback, and orbital camera sequence.
+3. The final orbital shot continues while the temporary brand mark, wordmark, and punchline appear.
+4. The visitor proceeds to the FOR HIM / FOR HER collection gateway.
 
-The intro can be skipped. It is shown once per browser session. The app detects `prefers-reduced-motion`; in that mode the opening becomes a short, static brand reveal. The shader uses a 60 FPS animation target and scales the renderer pixel ratio down on mobile.
+The intro has a skip control and respects `prefers-reduced-motion`. The real observation remains as a still fallback if the external video is unavailable or autoplay is blocked.
+
+## Scientific image and video credits
+
+- **EHT observation:** Event Horizon Telescope Collaboration, M87*, 2019. Image supplied by the European Southern Observatory (ESO): https://www.eso.org/public/images/eso1907a/
+- **Moving simulation footage:** NASA/JPL-Caltech/R. Hurt (IPAC), *Black Hole with Accretion Disk Visualization*: https://svs.gsfc.nasa.gov/14619/
+
+The M87* frame is an observational reconstruction. The moving footage is a NASA scientific visualization, not live telescope footage. NASA describes this visualization as a qualitatively correct depiction using a simplified optical model, rather than a full general-relativistic ray-tracing calculation. The visuals are credited in the opening scene.
 
 ## Brand replacement
 
-The temporary orbital emblem is isolated in `src/components/BrandMark.tsx`. Replace the SVG in that component with the final brand asset while keeping its props and wrapper class names. The black-hole canvas and page flow are independent of the logo artwork.
+The temporary orbital emblem is isolated in `src/components/BrandMark.tsx`. Replace the SVG in that component with the final brand asset while keeping its props and wrapper class names. The black-hole sequence and page flow are independent of the logo artwork.
 
 The placeholder is an original orbital mark, not the Grok logo or a Grok wordmark.
 
@@ -33,12 +41,12 @@ Edit `src/data/products.ts` to replace sample products, prices, types, categorie
 
 ## Commerce integration status
 
-This branch is a visual and interaction prototype. The current starter repository did not include live authentication, database-backed inventory, shipping, payment, or checkout services. The bag and wishlist interactions currently run in client-side React state; the drawer explicitly identifies checkout as a service that still needs to be connected. Keep any existing production credentials and payment integrations out of source control.
+This branch is a visual and interaction prototype. The starter project did not include live authentication, database-backed inventory, shipping, payment, or checkout services. The bag and wishlist interactions currently run in client-side React state. Real order processing still needs to be connected.
 
 ## Performance notes
 
-- Three.js renders a procedural fragment shader instead of loading a large animated GIF.
-- Device pixel ratio is capped more aggressively on mobile.
-- The render loop pauses when the page is hidden.
-- The intro component disposes its WebGL renderer, geometry, material, and animation frame on unmount.
-- Editorial photography is currently loaded from remote Unsplash image URLs; replace these with optimized, locally hosted brand photography before production.
+- Uses native HTML video rather than a custom procedural ring shader.
+- 4K source files are selected on wider desktop viewports; 1080p versions are supplied as the fallback source.
+- The EHT image remains available as a poster / loading fallback.
+- Video is muted and plays inline, as required for most browser autoplay policies.
+- External NASA video assets are streamed from NASA's Scientific Visualization Studio; network availability and autoplay policy can affect the opening sequence.
