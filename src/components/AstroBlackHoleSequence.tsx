@@ -69,6 +69,12 @@ export default function AstroBlackHoleSequence({
   }, [activeClip, reducedMotion]);
 
   useEffect(() => {
+    if (!reducedMotion && videoAvailable[activeClip]) {
+      setShowObservation(false);
+    }
+  }, [activeClip, videoAvailable, reducedMotion]);
+
+  useEffect(() => {
     if (reducedMotion && !revealSent.current) {
       const timer = window.setTimeout(() => {
         revealSent.current = true;
