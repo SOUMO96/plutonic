@@ -179,7 +179,7 @@ export default function BlackHoleCanvas({ reducedMotion = false }: BlackHoleCanv
     const start = performance.now();
     let frame = 0;
     let lastFrame = 0;
-    const frameInterval = mobile ? 1000 / 30 : 1000 / 60;
+    const frameInterval = 1000 / 60;
     const smooth = (value: number) => {
       const x = Math.min(1, Math.max(0, value));
       return x * x * (3 - 2 * x);
