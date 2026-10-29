@@ -17,8 +17,8 @@ Create a production build with `npm run build`. Run TypeScript checks with `npm 
 
 1. Opens on the EHT M87* observation as a loading fallback, then plays the single approved NASA/JPL-Caltech pullback clip.
 2. The moving black-hole plate is rotated to match the uploaded logo slash axis (approximately -21.3° on screen).
-3. The camera pullback completes, then the video performs a controlled push-in and fades towards black.
-4. The supplied PLUTONIC artwork crossfades in as one image. It already contains one symbol and one wordmark, so no generated logo, particle layer, or duplicate typography is rendered.
+3. The camera pullback completes, then the video performs a controlled push-in and fades completely to black before the logo appears.
+4. The supplied PLUTONIC artwork fades in from black as one image. It already contains one symbol and one wordmark, so no generated logo, particle layer, or duplicate typography is rendered.
 5. The punchline remains an empty editable constant in `src/components/PlutonicLogoReveal.tsx`; no wording is invented.
 6. The same background component remains mounted for the subsequent FOR HIM / FOR HER screen.
 
