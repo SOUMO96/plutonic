@@ -15,14 +15,14 @@ Create a production build with `npm run build`. Run TypeScript checks with `npm 
 
 ## Opening sequence
 
-1. Opens on the EHT M87* observation fallback, then plays the single approved NASA/JPL-Caltech pullback shot.
-2. At the end of the pullback, the background performs a cinematic push-in and darkens toward black.
-3. Warm accretion-disk light and white photon-ring particles converge, then reform into points sampled from the supplied PLUTONIC logo artwork.
-4. Once the particle field settles, the original replaceable logo asset at `public/plutonic-logo.svg` appears sharply for the final brand hold.
-5. The punchline remains an empty editable constant in `src/components/PlutonicLogoReveal.tsx`; no tagline is invented.
+1. Opens on the EHT M87* observation as a loading fallback, then plays the single approved NASA/JPL-Caltech pullback clip.
+2. The moving black-hole plate is rotated to match the uploaded logo slash axis (approximately -21.3° on screen).
+3. The camera pullback completes, then the video performs a controlled push-in and fades towards black.
+4. The supplied PLUTONIC artwork crossfades in as one image. It already contains one symbol and one wordmark, so no generated logo, particle layer, or duplicate typography is rendered.
+5. The punchline remains an empty editable constant in `src/components/PlutonicLogoReveal.tsx`; no wording is invented.
 6. The same background component remains mounted for the subsequent FOR HIM / FOR HER screen.
 
-The intro has a skip control and respects `prefers-reduced-motion`. The real observation remains as a still fallback if the external video is unavailable or autoplay is blocked.
+The intro has a skip control and respects `prefers-reduced-motion`. The EHT image remains a still fallback if the NASA video is unavailable or browser autoplay is blocked.
 
 ## Scientific image and video credits
 
@@ -31,9 +31,9 @@ The intro has a skip control and respects `prefers-reduced-motion`. The real obs
 
 The M87* frame is an observational reconstruction. The moving footage is a NASA scientific visualization, not live telescope footage. NASA describes this visualization as a qualitatively correct depiction using a simplified optical model, rather than a full general-relativistic ray-tracing calculation. The visuals are credited in the opening scene.
 
-## Brand replacement
+## Brand asset
 
-The supplied PLUTONIC artwork is stored as a replaceable asset at `public/plutonic-logo.svg`. The intro samples its bright pixels for the particle destination, then displays that asset itself for the final crisp logo hold. Replace this single asset when the master-resolution brand artwork is available. The black-hole footage and particle timeline are independent of the artwork.
+The supplied PLUTONIC artwork is stored at `public/plutonic-logo.webp`. The intro displays this one complete image asset for the final lockup; it is not reconstructed with CSS, SVG or particle effects. Replace this file when the approved master artwork changes. The black-hole sequence and logo crossfade are independent of the asset.
 
 ## Product catalogue
 
@@ -46,7 +46,8 @@ This branch is a visual and interaction prototype. The starter project did not i
 ## Performance notes
 
 - Uses the single NASA pullback clip as the moving astrophysical background.
-- Particle destinations are sampled from the supplied logo asset; the original asset is used for the final display.
-- The final shape transition is a cinematic particle morph, not a physically simulated black-hole-to-logo spacetime transformation.
+- The final logo lockup is the supplied original artwork, shown once as a single image.
+- The video plate is rotated to align its accretion-disk axis with the diagonal slash in the supplied logo.
+- No decorative photon-ring overlay, extra orbital border, particle canvas, or duplicated wordmark is used.
 - The EHT image remains available as a poster / loading fallback.
 - Video is muted and plays inline; network availability and browser autoplay policy can affect the opening sequence.
