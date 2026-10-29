@@ -76,7 +76,7 @@ export default function AstroBlackHoleSequence({
   };
 
   return (
-    <div className={`astro-scene astro-mode-${mode}`} aria-label="EHT observation and NASA black-hole pullback simulation">
+    <div className={`astro-scene astro-mode-${mode} ${videoAvailable ? 'has-footage' : ''}`} aria-label="NASA black-hole pullback simulation">
       <img
         className={'astro-observation ' + (showObservation ? 'is-visible' : 'is-receded')}
         src={EHT_OBSERVATION}
@@ -101,6 +101,7 @@ export default function AstroBlackHoleSequence({
           aria-hidden="true"
         />
       )}
+      <div className="astro-photon-ring" aria-hidden="true" />
       <div className="astro-vignette" />
       <div className="astro-credit">
         <span>OBSERVATION · EHT COLLABORATION · M87*</span>
