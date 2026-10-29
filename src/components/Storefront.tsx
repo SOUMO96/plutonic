@@ -45,7 +45,7 @@ export default function Storefront({ category, onChangeCategory }: Props) {
         <button className="nav-back" onClick={onChangeCategory} aria-label="Back to collections"><ArrowLeft size={17} /></button>
         <div className="store-nav-links">
           <button onClick={() => setFilter('ALL')}>NEW DROP</button>
-          <button onClick={() => setFilter('TOPS')}>CLOTHING</button>
+          <button onClick={() => { setFilter('ALL'); document.getElementById('pieces')?.scrollIntoView({ behavior: 'smooth' }); }}>CLOTHING</button>
           <button onClick={() => document.getElementById('brand-note')?.scrollIntoView({ behavior: 'smooth' })}>THE POINT OF VIEW</button>
         </div>
         <button className="store-brand" onClick={onChangeCategory} aria-label="Choose another collection">
