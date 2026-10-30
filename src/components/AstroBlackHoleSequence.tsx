@@ -93,8 +93,9 @@ export default function AstroBlackHoleSequence({
           muted
           playsInline
           autoPlay
-          preload="auto"
+          preload="metadata"
           loop
+          disablePictureInPicture
           onCanPlay={handleCanPlay}
           onTimeUpdate={handleTimeUpdate}
           onError={handleVideoError}
