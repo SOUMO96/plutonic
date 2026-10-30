@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="738" height="499" viewBox="0 0 738 499">
+  <title>PLUTONIC logo — transparent background</title>
+  <defs>
+    <filter id="background-key" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="
+        1 0 0 0 0
+        0 1 0 0 0
+        0 0 1 0 0
+        .367 .367 .366 0 -.060"/>
+    </filter>
+  </defs>
+  <image href="/plutonic-logo.webp" x="-111" y="-197" width="960" height="960"
+         preserveAspectRatio="none" filter="url(#background-key)"/>
+</svg>
