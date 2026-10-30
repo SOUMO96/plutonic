@@ -15,25 +15,21 @@ Create a production build with `npm run build`. Run TypeScript checks with `npm 
 
 ## Opening sequence
 
-1. Opens on the EHT M87* observation as a loading fallback, then plays the single approved NASA/JPL-Caltech pullback clip.
-2. The moving black-hole plate is rotated to match the uploaded logo slash axis (approximately -21.3° on screen).
-3. The camera pullback completes, then the video performs a controlled push-in and fades completely to black before the logo appears.
-4. The supplied PLUTONIC artwork fades in from black as one image. It already contains one symbol and one wordmark, so no generated logo, particle layer, or duplicate typography is rendered.
-5. The punchline remains an empty editable constant in `src/components/PlutonicLogoReveal.tsx`; no wording is invented.
-6. The same background component remains mounted for the subsequent FOR HIM / FOR HER screen.
+1. Plays the approved single NASA/JPL-Caltech black-hole pullback.
+2. The event-horizon and accretion-disk framing is aligned with the supplied PLUTONIC mark: the disk axis matches the logo slash angle and the central opening aligns with the symbol aperture.
+3. The background push and logo reveal use one shared CSS timeline. The source video remains visible while the cropped, transparent source logo is revealed over it; the video fades only after the logo is already legible.
+4. The logo is a single image asset at `public/plutonic-logo-transparent.svg`. It uses the existing artwork from `public/plutonic-logo.webp`, crops the surrounding dark canvas/perimeter, and applies a luminance key so no square image background is displayed. No logo is redrawn, and no particles or duplicate wordmark are used.
+5. The final image contains the supplied symbol and PLUTONIC wordmark once. The punchline constant remains empty until approved wording is provided.
+6. The scene continues into the FOR HIM / FOR HER collection gateway.
 
-The intro has a skip control and respects `prefers-reduced-motion`. The EHT image remains a still fallback if the NASA video is unavailable or browser autoplay is blocked.
+The intro has a skip control and respects `prefers-reduced-motion`. The EHT M87* observation remains as fallback if the external video cannot play.
 
 ## Scientific image and video credits
 
 - **EHT observation:** Event Horizon Telescope Collaboration, M87*, 2019. Image supplied by the European Southern Observatory (ESO): https://www.eso.org/public/images/eso1907a/
 - **Moving simulation footage:** NASA/JPL-Caltech/R. Hurt (IPAC), *Black Hole with Accretion Disk Visualization*: https://svs.gsfc.nasa.gov/14619/
 
-The M87* frame is an observational reconstruction. The moving footage is a NASA scientific visualization, not live telescope footage. NASA describes this visualization as a qualitatively correct depiction using a simplified optical model, rather than a full general-relativistic ray-tracing calculation. The visuals are credited in the opening scene.
-
-## Brand asset
-
-The supplied PLUTONIC artwork is stored at `public/plutonic-logo.webp`. The intro displays this one complete image asset for the final lockup; it is not reconstructed with CSS, SVG or particle effects. Replace this file when the approved master artwork changes. The black-hole sequence and logo crossfade are independent of the asset.
+The M87* frame is an observational reconstruction. The moving footage is a NASA scientific visualization, not live telescope footage. NASA describes this visualization as a qualitatively correct depiction using a simplified optical model, rather than a full general-relativistic ray-tracing calculation.
 
 ## Product catalogue
 
@@ -42,12 +38,3 @@ Edit `src/data/products.ts` to replace sample products, prices, types, categorie
 ## Commerce integration status
 
 This branch is a visual and interaction prototype. The starter project did not include live authentication, database-backed inventory, shipping, payment, or checkout services. The bag and wishlist interactions currently run in client-side React state. Real order processing still needs to be connected.
-
-## Performance notes
-
-- Uses the single NASA pullback clip as the moving astrophysical background.
-- The final logo lockup is the supplied original artwork, shown once as a single image.
-- The video plate is rotated to align its accretion-disk axis with the diagonal slash in the supplied logo.
-- No decorative photon-ring overlay, extra orbital border, particle canvas, or duplicated wordmark is used.
-- The EHT image remains available as a poster / loading fallback.
-- Video is muted and plays inline; network availability and browser autoplay policy can affect the opening sequence.
