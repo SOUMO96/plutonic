@@ -1746,7 +1746,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
    plate border shows. The morph reads this box and transform, so the handoff
    and the final mark layout stay in sync. */
 @media (max-aspect-ratio: 1/1) {
-  .astro-scene { --bh-fit: 1.6; }
+  .astro-scene { --bh-fit: 1.1; }
   .astro-footage,
   .astro-footage.is-active {
     inset: auto;
