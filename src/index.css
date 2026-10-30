@@ -1736,3 +1736,26 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
   }
   .bh-lockup-punchline { font-size:9px; letter-spacing:.32em; padding-left:.32em; }
 }
+
+
+/* ─── Portrait screens: fit the whole black hole ───────────────────────────
+   The 16:9 plate is cover-cropped to a narrow slice on a phone, so the desktop
+   zoom makes the ring ~2× wider than the screen. Scale the plate by the
+   viewport aspect instead. The WebGL morph reads this transform, so the
+   handoff and the final mark layout stay in sync. */
+@media (max-aspect-ratio: 1/1) {
+  .astro-scene { --bh-fit: 1.2; }
+  .astro-footage,
+  .astro-footage.is-active,
+  .astro-mode-intro .astro-footage.is-active,
+  .astro-mode-brand .astro-footage.is-active {
+    transform: translate3d(1vw,-1vh,0) rotate(-19.5deg) scale(var(--bh-fit));
+  }
+  .astro-mode-categories .astro-footage.is-active,
+  .astro-mode-store .astro-footage.is-active {
+    transform: translate3d(1vw,-1vh,0) rotate(-19.5deg) scale(calc(var(--bh-fit) * 1.04));
+  }
+}
+@media (max-aspect-ratio: 4/5) { .astro-scene { --bh-fit: .92; } }
+@media (max-aspect-ratio: 5/8) { .astro-scene { --bh-fit: .74; } }
+@media (max-aspect-ratio: 8/17) { .astro-scene { --bh-fit: .64; } }
