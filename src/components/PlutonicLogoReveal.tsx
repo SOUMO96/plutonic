@@ -1,51 +1,33 @@
-import { useEffect, useState } from 'react';
-
 type Props = {
   active: boolean;
   reducedMotion?: boolean;
 };
 
-const LOGO_SRC = '/plutonic-logo.webp';
-
-// Keep empty until the approved brand punchline is supplied.
+// Leave empty until the approved punchline is supplied.
 const BRAND_PUNCHLINE = '';
 
 /**
- * The supplied artwork already contains the complete orbital symbol and
- * PLUTONIC wordmark. Render this one image exactly once. No SVG recreation,
- * particle layer, duplicate type, or decorative orbit is placed over it.
+ * Single-image lockup. The source artwork already contains the symbol and
+ * PLUTONIC wordmark. A luminance key in public/plutonic-logo-transparent.svg
+ * removes only the near-black image background; no logo paths are redrawn.
+ *
+ * The logo reveal is CSS-timed from the same .astro-mode-brand class change
+ * as the background push-in. There is no independent JS timer or delayed image
+ * insertion to create a black gap.
  */
 export default function PlutonicLogoReveal({ active, reducedMotion = false }: Props) {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!active) {
-      setVisible(false);
-      return;
-    }
-
-    if (reducedMotion) {
-      setVisible(true);
-      return;
-    }
-
-    // The background completes its push-in and fades to pure black in 3.4s.
-    // Reveal the full-frame logo only after that, preventing the old video
-    // from showing through its near-black source background and doubling it.
-    const timer = window.setTimeout(() => setVisible(true), 3550);
-    return () => window.clearTimeout(timer);
-  }, [active, reducedMotion]);
-
   return (
     <div
-      className={`plutonic-logo-reveal ${active ? 'is-active' : ''} ${visible ? 'is-visible' : ''}`}
+      className={'plutonic-logo-reveal ' + (active ? 'is-active ' : '') + (reducedMotion ? 'is-reduced' : '')}
       aria-live="polite"
     >
       <img
         className="plutonic-final-logo"
-        src={LOGO_SRC}
-        alt="PLUTONIC brand logo"
+        src="/plutonic-logo-transparent.svg"
+        alt="PLUTONIC"
         draggable={false}
+        decoding="sync"
+        fetchPriority="high"
       />
       {BRAND_PUNCHLINE && <p className="plutonic-punchline">{BRAND_PUNCHLINE}</p>}
     </div>
