@@ -1502,3 +1502,140 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
 .astro-mode-brand .astro-vignette {
   background:rgba(0,0,0,.12);
 }
+
+
+/* ─── Performance pass: keep the visual direction, remove per-frame filters ──
+   The NASA footage is already a rendered cinematic source. Re-filtering and
+   blurring the entire decoded 1080p frame every animation frame is wasteful.
+   The transition now uses composited transforms and opacity only. */
+.astro-scene {
+  background:#000;
+  contain:layout paint;
+}
+.astro-footage,
+.astro-footage.is-active {
+  transform-origin:50% 50%;
+  transform:translate3d(1.2vw,-1.4vh,0) rotate(-19.5deg) scale(1.38);
+  filter:none !important;
+  -webkit-filter:none !important;
+  backface-visibility:hidden;
+  -webkit-backface-visibility:hidden;
+  will-change:transform, opacity;
+  transition:opacity .35s linear;
+  object-fit:cover;
+  object-position:center;
+}
+.astro-mode-intro .astro-footage.is-active {
+  transform:translate3d(1.2vw,-1.4vh,0) rotate(-19.5deg) scale(1.38);
+  filter:none !important;
+}
+@keyframes plutonic-black-hole-matchcut-fast {
+  0%, 32% {
+    transform:translate3d(1.2vw,-1.4vh,0) rotate(-19.5deg) scale(1.38);
+    opacity:1;
+  }
+  58% {
+    transform:translate3d(1.2vw,-1.8vh,0) rotate(-19.5deg) scale(1.46);
+    opacity:.96;
+  }
+  80% {
+    transform:translate3d(1.2vw,-2vh,0) rotate(-19.5deg) scale(1.52);
+    opacity:.48;
+  }
+  100% {
+    transform:translate3d(1.2vw,-2vh,0) rotate(-19.5deg) scale(1.56);
+    opacity:0;
+  }
+}
+.astro-mode-brand .astro-footage.is-active {
+  animation:plutonic-black-hole-matchcut-fast var(--plutonic-reveal-duration)
+    cubic-bezier(.18,.78,.16,1) both;
+  filter:none !important;
+  -webkit-filter:none !important;
+  transition:none;
+}
+.astro-mode-brand .astro-observation {
+  opacity:0;
+  filter:none !important;
+}
+.astro-mode-brand .astro-vignette {
+  background:#000;
+}
+.astro-mode-categories .astro-footage.is-active,
+.astro-mode-store .astro-footage.is-active {
+  animation:none;
+  opacity:.44;
+  transform:translate3d(1.2vw,-1.4vh,0) rotate(-19.5deg) scale(1.42);
+  filter:none !important;
+  -webkit-filter:none !important;
+  transition:opacity .45s linear, transform .5s ease;
+}
+.astro-mode-categories .astro-observation,
+.astro-mode-store .astro-observation {
+  opacity:0;
+  filter:none !important;
+  transform:translate3d(1.2vw,-1.4vh,0) rotate(-19.5deg) scale(1.42);
+}
+.astro-mode-categories .astro-vignette,
+.astro-mode-store .astro-vignette {
+  background:rgba(0,0,0,.58);
+  transition:background .5s ease;
+}
+
+/* Keep the logo handoff light: avoid animated clip-path rasterization. */
+.plutonic-final-logo {
+  clip-path:none !important;
+  filter:none !important;
+  will-change:opacity,transform;
+  backface-visibility:hidden;
+  transform:translate3d(0,0,0) scale(.985);
+}
+@keyframes plutonic-logo-reveal-fast {
+  0%, 34% {
+    opacity:0;
+    transform:translate3d(0,8px,0) scale(.975);
+  }
+  60% {
+    opacity:.78;
+    transform:translate3d(0,2px,0) scale(.992);
+  }
+  100% {
+    opacity:1;
+    transform:translate3d(0,0,0) scale(1);
+  }
+}
+.plutonic-logo-reveal.is-active .plutonic-final-logo {
+  animation:plutonic-logo-reveal-fast var(--plutonic-reveal-duration)
+    cubic-bezier(.16,1,.3,1) both !important;
+}
+.plutonic-logo-reveal.is-active {
+  contain:layout paint;
+}
+.cinematic-intro-ui,
+.cinematic-brand-stack {
+  contain:layout paint;
+}
+@media(max-width:700px) {
+  .astro-footage,
+  .astro-footage.is-active,
+  .astro-mode-intro .astro-footage.is-active {
+    transform:translate3d(1.5vw,-1vh,0) rotate(-19.5deg) scale(1.46);
+  }
+  .astro-mode-brand .astro-footage.is-active {
+    animation:plutonic-black-hole-matchcut-fast var(--plutonic-reveal-duration)
+      cubic-bezier(.18,.78,.16,1) both;
+  }
+  .astro-mode-categories .astro-footage.is-active,
+  .astro-mode-store .astro-footage.is-active {
+    transform:translate3d(1.5vw,-1vh,0) rotate(-19.5deg) scale(1.5);
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  .astro-footage { filter:none !important; }
+  .plutonic-final-logo {
+    animation:none !important;
+    clip-path:none !important;
+    opacity:1;
+    transform:none;
+  }
+}
