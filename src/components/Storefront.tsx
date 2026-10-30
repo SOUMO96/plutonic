@@ -49,7 +49,7 @@ export default function Storefront({ category, onChangeCategory }: Props) {
           <button onClick={() => document.getElementById('brand-note')?.scrollIntoView({ behavior: 'smooth' })}>THE POINT OF VIEW</button>
         </div>
         <button className="store-brand" onClick={onChangeCategory} aria-label="Choose another collection">
-          <BrandMark size={31} /><span>PLUTONIC</span>
+          <BrandMark size={31} />
         </button>
         <div className="store-nav-actions">
           <label className="store-search">
@@ -114,7 +114,7 @@ export default function Storefront({ category, onChangeCategory }: Props) {
       </section>
 
       <footer className="store-footer">
-        <div className="footer-brand"><BrandMark size={32} /><span>PLUTONIC</span></div>
+        <div className="footer-brand"><BrandMark size={32} /></div>
         <p>BEYOND THE ORDINARY.</p>
         <div><a href="#pieces">SHOP</a><a href="#brand-note">OUR POINT OF VIEW</a><a href="mailto:hello@plutonic.example">CONTACT</a></div>
         <small>© 2026 PLUTONIC. A STUDY IN EVERYDAY FORM.</small>
