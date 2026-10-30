@@ -1769,10 +1769,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
   .astro-footage.is-active,
   .astro-mode-intro .astro-footage.is-active,
   .astro-mode-brand .astro-footage.is-active {
-    transform: translate3d(1vw,-1vh,0) rotate(-19.5deg) scale(var(--bh-fit));
+    transform: translate3d(1vw,3vh,0) rotate(-19.5deg) scale(var(--bh-fit));
   }
   .astro-mode-categories .astro-footage.is-active,
   .astro-mode-store .astro-footage.is-active {
-    transform: translate3d(1vw,-1vh,0) rotate(-19.5deg) scale(calc(var(--bh-fit) * 1.04));
+    transform: translate3d(1vw,3vh,0) rotate(-19.5deg) scale(calc(var(--bh-fit) * 1.04));
   }
 }
