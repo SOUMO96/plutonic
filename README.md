@@ -15,14 +15,16 @@ Create a production build with `npm run build`. Run TypeScript checks with `npm 
 
 ## Opening sequence
 
-1. Plays the approved single NASA/JPL-Caltech black-hole pullback.
-2. The event-horizon and accretion-disk framing is aligned with the supplied PLUTONIC mark: the disk axis matches the logo slash angle and the central opening aligns with the symbol aperture.
-3. The background push and logo reveal use one shared CSS timeline. The source video remains visible while the cropped, transparent source logo is revealed over it; the video fades only after the logo is already legible.
-4. The logo is a single image asset at `public/plutonic-logo-transparent.svg`. It uses the existing artwork from `public/plutonic-logo.webp`, crops the surrounding dark canvas/perimeter, and applies a luminance key so no square image background is displayed. No logo is redrawn, and no particles or duplicate wordmark are used.
-5. The final image contains the supplied symbol and PLUTONIC wordmark once. The punchline constant remains empty until approved wording is provided.
+1. Plays the approved single NASA/JPL-Caltech black-hole pullback. The plate is rotated so the accretion disk follows the PLUTONIC slash angle.
+2. At 7.5 s a WebGL canvas (`src/components/BlackHoleLogoMorph.tsx`, `src/lib/blackHoleLogoMorph.ts`) takes over on the identical pixels by reading the video plate's live CSS transform.
+3. Pull-back: the camera eases back and re-centres the black hole on the lockup position while the footage keeps playing, slowing toward the end.
+4. Transformation: the live footage is deformed (disk compressed into the slash, a brief frame-dragging twist) and its luminance field is level-set morphed into a signed-distance field generated at runtime from `public/plutonic-logo.webp`. The photon ring becomes the ring, the disk becomes the slash, and the shadow remains the solid dark aperture. The mark is never drawn as a separate image.
+5. The symbol settles, then the asset's own PLUTONIC wordmark is revealed, followed by the punchline BEYOND THE ORDINARY.
 6. The scene continues into the FOR HIM / FOR HER collection gateway.
 
-The intro has a skip control and respects `prefers-reduced-motion`. The EHT M87* observation remains as fallback if the external video cannot play.
+In development, `window.__morphHold = <seconds>` freezes the transformation timeline for frame inspection (stripped from production builds).
+
+The intro has a skip control and respects `prefers-reduced-motion` (a static lockup that reveals symbol, wordmark and punchline in sequence; the same lockup is the fallback when WebGL or the local footage is unavailable). The EHT M87* observation remains as fallback if the external video cannot play.
 
 ## Scientific image and video credits
 

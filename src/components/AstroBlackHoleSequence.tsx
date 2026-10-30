@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import BlackHoleLogoMorph from './BlackHoleLogoMorph';
 
 export type AstroSceneMode = 'intro' | 'brand' | 'categories' | 'store';
 
@@ -127,6 +128,12 @@ export default function AstroBlackHoleSequence({
           aria-hidden="true"
         />
       )}
+      <BlackHoleLogoMorph
+        mode={mode}
+        videoRef={videoRef}
+        footageReady={videoAvailable}
+        reducedMotion={reducedMotion}
+      />
       <div className="astro-vignette" />
       <div className="astro-credit">
         <span>OBSERVATION · EHT COLLABORATION · M87*</span>
