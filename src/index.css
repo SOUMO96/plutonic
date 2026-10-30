@@ -1486,3 +1486,19 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
     transform:translate(2vw,-1.8vh) rotate(-19.5deg) scale(1.74);
   }
 }
+
+
+
+/* Keep the observational fallback on screen if the external NASA video fails.
+   Only hide it once the real moving footage has reached a playable frame. */
+.astro-mode-brand .astro-observation {
+  opacity:.42;
+  filter:brightness(.3) contrast(1.1) saturate(.8);
+  transition:opacity 1.1s ease, filter 1.4s ease;
+}
+.astro-scene.astro-mode-brand.has-footage .astro-observation {
+  opacity:0;
+}
+.astro-mode-brand .astro-vignette {
+  background:rgba(0,0,0,.12);
+}
