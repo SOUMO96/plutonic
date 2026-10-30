@@ -12,8 +12,8 @@ const collections = [
     number: '01',
     title: 'FOR HIM',
     subtitle: 'A study in form, function and presence.',
-    image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1800&q=88',
-    position: 'center 26%',
+    image: 'https://images.unsplash.com/photo-1575862980084-cd0645edddba?auto=format&fit=crop&w=1800&q=88',
+    position: 'center 30%',
   },
   {
     id: 'her' as const,
