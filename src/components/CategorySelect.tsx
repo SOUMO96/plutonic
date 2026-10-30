@@ -12,7 +12,7 @@ const collections = [
     number: '01',
     title: 'FOR HIM',
     subtitle: 'A study in form, function and presence.',
-    image: 'https://images.unsplash.com/photo-1575862980084-cd0645edddba?auto=format&fit=crop&w=1800&q=88',
+    image: 'https://images.unsplash.com/photo-1732286521833-fdf4b65b404a?auto=format&fit=crop&w=1800&q=88',
     position: 'center 30%',
   },
   {
