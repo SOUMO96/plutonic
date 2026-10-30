@@ -1033,3 +1033,181 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 1px solid 
     opacity: 0;
   }
 }
+
+
+
+/* ─── PLUTONIC matched-cut timeline ───────────────────────────────────────
+   The video push-in and source-logo iris start on the SAME mode change.
+   The logo asset is preloaded from index.html; no JS delay, particle canvas,
+   duplicate wordmark, or separately drawn ring is involved. */
+:root {
+  --plutonic-reveal-duration: 4.2s;
+}
+.plutonic-logo-reveal {
+  position: fixed;
+  z-index: 8;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 24px;
+  pointer-events: none;
+  background: transparent;
+}
+.plutonic-final-logo {
+  display: block;
+  width: min(72vw, 620px);
+  height: auto;
+  max-height: 74vh;
+  aspect-ratio: 738 / 499;
+  object-fit: contain;
+  opacity: 0;
+  clip-path: circle(0% at 50% 37%);
+  filter: none;
+  transform: translateZ(0);
+  animation: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.plutonic-logo-reveal.is-active .plutonic-final-logo {
+  animation: plutonic-logo-iris-reveal var(--plutonic-reveal-duration)
+    cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes plutonic-logo-iris-reveal {
+  0% {
+    opacity: 0;
+    clip-path: circle(0% at 50% 37%);
+  }
+  48% {
+    opacity: 0;
+    clip-path: circle(2% at 50% 37%);
+  }
+  62% {
+    opacity: .28;
+    clip-path: circle(22% at 50% 37%);
+  }
+  78% {
+    opacity: .78;
+    clip-path: circle(54% at 50% 37%);
+  }
+  92% {
+    opacity: 1;
+    clip-path: circle(82% at 50% 37%);
+  }
+  100% {
+    opacity: 1;
+    clip-path: circle(115% at 50% 37%);
+  }
+}
+.plutonic-punchline {
+  position: absolute;
+  top: calc(50% + min(29vw, 198px));
+  left: 0;
+  right: 0;
+  margin: 0;
+  color: rgba(255,255,255,.9);
+  text-align: center;
+  font: 400 10px var(--sans);
+  letter-spacing: .34em;
+  opacity: 0;
+  transform: translateY(9px);
+  transition: opacity .8s ease .45s, transform .8s ease .45s;
+}
+.plutonic-logo-reveal.is-active .plutonic-punchline {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* The single approved NASA pullback remains live until the logo iris has
+   completely covered the event-horizon alignment. Its camera axis stays at
+   -57.3deg, matching the uploaded mark's -21.3deg slash against the source
+   frame's +36deg disk axis. The small vertical compensation aligns the
+   event-horizon centre with the logo symbol's centre above its wordmark. */
+@keyframes plutonic-black-hole-matchcut {
+  0% {
+    transform: translateY(0) rotate(-57.3deg) scale(1.42);
+    filter: brightness(.96) contrast(1.12) saturate(1.08);
+    opacity: 1;
+  }
+  48% {
+    transform: translateY(-2vh) rotate(-57.3deg) scale(1.68);
+    filter: brightness(.84) contrast(1.14) saturate(1.04);
+    opacity: .98;
+  }
+  68% {
+    transform: translateY(-4vh) rotate(-57.3deg) scale(1.96);
+    filter: brightness(.65) contrast(1.16) saturate(.96);
+    opacity: .82;
+  }
+  84% {
+    transform: translateY(-4vh) rotate(-57.3deg) scale(2.18);
+    filter: brightness(.3) contrast(1.18) saturate(.78) blur(1px);
+    opacity: .34;
+  }
+  100% {
+    transform: translateY(-4vh) rotate(-57.3deg) scale(2.32);
+    filter: brightness(.02) contrast(1.2) saturate(.45) blur(5px);
+    opacity: 0;
+  }
+}
+.astro-mode-brand .astro-footage.is-active {
+  animation: plutonic-black-hole-matchcut var(--plutonic-reveal-duration)
+    cubic-bezier(.18,.78,.16,1) both;
+  transform-origin: 50% 50%;
+  transition: none;
+}
+.astro-mode-brand .astro-observation {
+  opacity: 0;
+  filter: brightness(0);
+}
+.astro-mode-brand .astro-vignette {
+  background: #000;
+  transition: background var(--plutonic-reveal-duration) ease;
+}
+.astro-mode-brand .astro-credit,
+.astro-mode-brand .astro-shot-label,
+.cinematic-intro-ui.is-revealed .cinematic-corner-brand,
+.cinematic-intro-ui.is-revealed .cinematic-bottom-note,
+.cinematic-intro-ui.is-revealed .cinematic-skip {
+  opacity: 0;
+  transition: opacity .6s ease;
+}
+
+/* The same background remains available for the category screen after the
+   logo hold; cancel the finished push animation before softening the scene. */
+.astro-mode-categories .astro-footage.is-active,
+.astro-mode-store .astro-footage.is-active {
+  animation: none;
+  opacity: .28;
+  transform: rotate(-57.3deg) scale(1.5);
+  filter: blur(7px) brightness(.3) contrast(1.12) saturate(.9);
+  transition: filter 1.6s ease, opacity 1.2s ease, transform 1.6s ease;
+}
+
+/* At reduced motion, still show the same exact logo asset immediately. */
+@media (max-width: 700px) {
+  .plutonic-final-logo {
+    width: min(82vw, 520px);
+    max-height: 66vh;
+  }
+  .plutonic-punchline {
+    top: calc(50% + min(34vw, 165px));
+    font-size: 8px;
+    letter-spacing: .24em;
+  }
+  .astro-mode-brand .astro-footage.is-active {
+    animation: plutonic-black-hole-matchcut var(--plutonic-reveal-duration)
+      cubic-bezier(.18,.78,.16,1) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plutonic-final-logo {
+    opacity: 1;
+    clip-path: none;
+    animation: none !important;
+  }
+  .astro-mode-brand .astro-footage.is-active {
+    animation: none;
+    opacity: 0;
+  }
+}
