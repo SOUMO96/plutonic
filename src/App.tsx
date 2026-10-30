@@ -1,29 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AstroBlackHoleSequence, { type AstroSceneMode } from './components/AstroBlackHoleSequence';
-import PlutonicLogoReveal from './components/PlutonicLogoReveal';
 import CategorySelect from './components/CategorySelect';
 import Storefront from './components/Storefront';
 
 type Stage = 'intro' | 'categories' | 'store';
 type Category = 'him' | 'her';
 
+/** Time from the brand trigger to the collection gateway: pull-back, morph, lockup, hold. */
+const INTRO_HOLD_MS = 8700;
+const INTRO_HOLD_REDUCED_MS = 5200;
+
 function CinematicIntro({
   revealed,
   dismissed = false,
   onSkip,
-  reducedMotion,
 }: {
   revealed: boolean;
   dismissed?: boolean;
   onSkip: () => void;
-  reducedMotion: boolean;
 }) {
   return (
     <div className={`cinematic-intro-ui ${revealed ? 'is-revealed' : ''} ${dismissed ? 'is-dismissed' : ''}`}>
       <div className="cinematic-corner-brand">PLUTONIC <span>—</span> AN EXPRESSION IN MOTION</div>
-      <div className="cinematic-brand-stack" aria-live="polite">
-        <PlutonicLogoReveal active={revealed} reducedMotion={reducedMotion} />
-      </div>
       {!dismissed && <button className="cinematic-skip" onClick={onSkip}>SKIP INTRO <span>↗</span></button>}
       <div className="cinematic-bottom-note">M87* / A STUDY IN GRAVITY</div>
     </div>
@@ -60,9 +58,9 @@ export default function App() {
     const timer = window.setTimeout(() => {
       window.sessionStorage.setItem('plutonic-intro-seen', 'yes');
       setStage('categories');
-    }, 7900);
+    }, reducedMotion ? INTRO_HOLD_REDUCED_MS : INTRO_HOLD_MS);
     return () => window.clearTimeout(timer);
-  }, [stage, brandReveal]);
+  }, [stage, brandReveal, reducedMotion]);
 
   const skipIntro = useCallback(() => {
     if (transitionTimer.current !== null) window.clearTimeout(transitionTimer.current);
@@ -96,7 +94,6 @@ export default function App() {
             revealed={brandReveal}
             dismissed={stage === 'categories'}
             onSkip={skipIntro}
-            reducedMotion={reducedMotion}
           />
         )}
         {stage === 'categories' && (
