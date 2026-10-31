@@ -1,5 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
 import path from 'path';
 import {defineConfig, loadEnv, type Plugin} from 'vite';
 
@@ -8,7 +9,22 @@ import {defineConfig, loadEnv, type Plugin} from 'vite';
  * middleware. Server env vars (ADMIN_*) are read from .env.local / the shell, never exposed
  * to the browser bundle. On Vercel the real serverless functions are used instead.
  */
-function devApi(env: Record<string, string>): Plugin {
+/** Plain KEY=VALUE reader with NO `$` expansion (Vite's loadEnv would mangle password hashes like `scrypt$16384$8$1$...`). */
+function rawEnv(mode: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of ['.env', '.env.local', `.env.${mode}`, `.env.${mode}.local`]) {
+    let text = ''; try { text = fs.readFileSync(path.resolve(__dirname, f), 'utf8'); } catch { continue; }
+    for (const line of text.split(/\r?\n/)) {
+      const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
+      if (!m || line.trimStart().startsWith('#')) continue;
+      out[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+    }
+  }
+  return out;
+}
+
+function devApi(mode: string): Plugin {
+  const env = rawEnv(mode);
   for (const k of ['ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'ADMIN_SESSION_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY', 'CASHFREE_APP_ID', 'CASHFREE_SECRET_KEY', 'CASHFREE_ENV', 'SITE_URL']) if (env[k] && !process.env[k]) process.env[k] = env[k];
   return {
     name: 'plutonic-dev-api',
@@ -32,7 +48,7 @@ function devApi(env: Record<string, string>): Plugin {
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
-    plugins: [react(), tailwindcss(), devApi(env)],
+    plugins: [react(), tailwindcss(), devApi(mode)],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },

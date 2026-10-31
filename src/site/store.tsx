@@ -472,7 +472,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const restoreProduct = (id: string) => { if (adminData) setAdminActive(id, true); else setState((s) => ({ ...s, removed: s.removed.filter((x) => x !== id) })); };
 
   /** Admin screens load every record through the administrator-only API (needs a verified admin session). */
-  const enterAdmin = async () => {
+  const enterAdmin = useCallback(async () => {
     if (!isLive) { setAdminStatus('ready'); return; }
     setAdminStatus('loading');
     try {
@@ -480,8 +480,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!r.ok) { setAdminStatus('error'); return; }
       setAdminData((await r.json()) as AdminData); setAdminStatus('ready');
     } catch { setAdminStatus('error'); }
-  };
-  const leaveAdmin = () => { setAdminData(null); setAdminStatus('idle'); };
+  }, []);
+  const leaveAdmin = useCallback(() => { setAdminData(null); setAdminStatus('idle'); }, []);
 
   const notifyMe = (id: string) => { setState((s) => ({ ...s, notify: s.notify.includes(id) ? s.notify : [...s.notify, id] })); say('We will let you know when it is back.'); };
   const setPrefs: Store['setPrefs'] = (p) => { if (supabase && uid.current) run(supabase.from('profiles').update({ ...(p.whatsapp !== undefined && { whatsapp: p.whatsapp }), ...(p.newsletter !== undefined && { newsletter: p.newsletter }) }).eq('id', uid.current)); setPrefsLocal(p); };
