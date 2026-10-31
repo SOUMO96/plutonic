@@ -10,8 +10,10 @@ const when = (t: number) => new Date(t).toLocaleString('en-IN', { day: 'numeric'
 
 /** Order tracking. */
 export function Tracking({ route }: { route: Route }) {
-  const { orders, cancelOrder, say } = useStore();
+  const { orders, cancelOrder, say, live, lookupOrder, user } = useStore();
   const [q, setQ] = useState(route.seg[1] ?? '');
+  const [mail, setMail] = useState('');
+  const [looked, setLooked] = useState<'idle' | 'busy' | 'none'>('idle');
   const o = orders.find((x) => x.id.toLowerCase() === (route.seg[1] ?? '').toLowerCase());
   const ref = (v: string) => v.trim().replace(/^#/, '').toUpperCase();
   return (
@@ -20,8 +22,15 @@ export function Tracking({ route }: { route: Route }) {
       <form className="field-row track-form" onSubmit={(e) => { e.preventDefault(); if (ref(q)) go('/tracking/' + ref(q)); }}>
         <label className="sr" htmlFor="ord">Order number</label><input id="ord" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order number, e.g. PL-10231" /><button className="btn btn--dark" type="submit">Track</button>
       </form>
-      {!route.seg[1] && <p className="muted">Enter an order number from your confirmation, or open one from <Link to="/account?tab=orders" className="ulink">your account</Link>. Sample orders: PL-10231, PL-10230.</p>}
-      {route.seg[1] && !o && <p className="err" role="alert">We couldn’t find an order called “{route.seg[1]}”.</p>}
+      {!route.seg[1] && <p className="muted">Enter an order number from your confirmation, or open one from <Link to="/account?tab=orders" className="ulink">your account</Link>. {live ? '' : 'Sample orders: PL-10231, PL-10230.'}</p>}
+      {route.seg[1] && !o && live && (
+        <form className="field-row track-form" onSubmit={(e) => { e.preventDefault(); setLooked('busy'); void lookupOrder(ref(route.seg[1]), mail).then((r) => setLooked(r ? 'idle' : 'none')); }}>
+          <label className="sr" htmlFor="ord-mail">Email used at checkout</label>
+          <input id="ord-mail" type="email" value={mail} onChange={(e) => setMail(e.target.value)} placeholder={user ? 'Email used at checkout' : 'Email used at checkout, to confirm it is yours'} required />
+          <button className="btn btn--dark" type="submit" disabled={looked === 'busy'}>{looked === 'busy' ? 'Looking…' : 'Find my order'}</button>
+        </form>
+      )}
+      {route.seg[1] && !o && (!live || looked === 'none') && <p className="err" role="alert">We couldn’t find an order called “{route.seg[1]}”{live ? ' for that email' : ''}.</p>}
       {o && (
         <div className="track-grid">
           <section>
@@ -107,7 +116,7 @@ export function Returns() {
       <div className="ret-grid">
         <form className="stack-24" onSubmit={(e) => { e.preventDefault(); if (!o || !item) return; createReturn({ orderId: o.id, productName: item.name, variant: `${item.colourName} · ${item.size}`, kind, reason, note }); setDone(true); }}>
           <section><h2 className="h3">Order</h2>
-            {delivered.length === 0 && <p className="muted">No delivered orders yet. Sample order PL-10230 is already delivered, so you can try the returns flow with it.</p>}
+            {delivered.length === 0 && <p className="muted">No delivered orders yet. Once an order is marked Delivered you can return or exchange it here.</p>}
             {delivered.map((x) => <label key={x.id} className={'opt-row' + (eligible(x) ? '' : ' off')}><input type="radio" name="o" disabled={!eligible(x)} checked={orderId === x.id} onChange={() => { setOrderId(x.id); setIdx(0); setDone(false); }} /><span><b>#{x.id}</b><small>Delivered {new Date(x.history[4] ?? x.createdAt).toLocaleDateString('en-IN')} · {x.items.length} item{x.items.length > 1 ? 's' : ''}</small></span><span className="muted small">{eligible(x) ? 'Eligible' : 'Window closed'}</span></label>)}</section>
           {o && <>
             <section><h2 className="h3">Item</h2>{o.items.map((i, n) => { const p = product(i.productId); return <label key={n} className="opt-row"><input type="radio" name="i" checked={idx === n} onChange={() => setIdx(n)} /><span><b>{i.name}</b><small>{i.colourName} · {i.size} · {inr(i.price)}</small></span>{p && <span className="ret-thumb"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span>}</label>; })}</section>

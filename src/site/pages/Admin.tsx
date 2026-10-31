@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES, COLOURS, inr, totalStock, type Gender, type Product } from '../catalog';
 import { Link } from '../router';
 import { ORDER_STEPS, useStore, type Coupon } from '../store';
@@ -96,6 +96,8 @@ function Bars({ data, unit = '' }: { data: [string, number][]; unit?: string }) 
 
 export default function Admin() {
   const s = useStore();
+  const { enterAdmin, leaveAdmin } = s;
+  useEffect(() => { void enterAdmin(); return () => leaveAdmin(); }, [enterAdmin, leaveAdmin]);
   const [sec, setSec] = useState<Section>('Overview');
   const [edit, setEdit] = useState<Product | null>(null);
   const [filter, setFilter] = useState('');
@@ -118,6 +120,8 @@ export default function Admin() {
         <button type="button" className="lbl ulink small admin-signout" onClick={() => { void adminSignOut(); }}>Sign out</button>
       </aside>
       <main className="admin-main">
+        {s.adminStatus === 'loading' && <p className="note" role="status">Loading data from the database…</p>}
+        {s.adminStatus === 'error' && <p className="note err" role="alert">The database could not be reached or is not configured on the server (SUPABASE_SERVICE_ROLE_KEY). Nothing here can be saved until that is fixed.</p>}
         <div className="admin-top"><div><h1 className="h2">{sec}</h1><span className="muted small">Access is verified by the server. Catalogue, orders and edits are demonstration data stored in this browser only.</span></div>{sec === 'Products' && <button className="btn btn--dark" type="button" onClick={() => setEdit(blank('men'))}>Add product</button>}</div>
 
         {sec === 'Overview' && <>

@@ -51,7 +51,7 @@ export default function Cart() {
 
         <aside className="summary" aria-label="Order summary">
           <span className="lbl muted">Order summary</span>
-          <form className="promo" onSubmit={(e) => { e.preventDefault(); const r = applyCoupon(code); setMsg({ ok: r.ok, text: r.message }); if (r.ok) setCode(''); }}>
+          <form className="promo" onSubmit={(e) => { e.preventDefault(); void applyCoupon(code).then((r) => { setMsg({ ok: r.ok, text: r.message }); if (r.ok) setCode(''); }); }}>
             <label htmlFor="coupon">Promo code</label>
             <div className="field-row"><input id="coupon" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. WELCOME10" autoCapitalize="characters" /><button className="btn btn--dark btn--sm" type="submit">Apply</button></div>
             {coupon ? <span className="ok small" role="status">{coupon.code} applied · {coupon.label} <button type="button" className="linkbtn" onClick={() => { removeCoupon(); setMsg(null); }}>Remove</button></span> : msg && <span className={(msg.ok ? 'ok' : 'err') + ' small'} role="status">{msg.text}</span>}

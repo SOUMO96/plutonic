@@ -24,7 +24,9 @@ function PasswordField({ label, value, onChange, error, autoComplete, id }: { la
 const Err = ({ m }: { m?: string }) => (m ? <span className="err small" role="alert">{m}</span> : null);
 
 function SignedOut({ route }: { route: Route }) {
-  const { signIn, say } = useStore();
+  const { signIn, say, live, auth } = useStore();
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState('');
   const [mode, setMode] = useState<'login' | 'signup'>(route.query.get('mode') === 'signup' ? 'signup' : 'login');
   const [view, setView] = useState<'email' | 'otp' | 'forgot'>('email');
   const [email, setEmail] = useState('');
@@ -49,7 +51,10 @@ function SignedOut({ route }: { route: Route }) {
           <button type="button" role="tab" aria-selected={mode === 'signup'} onClick={() => switchMode('signup')}>Sign up</button>
         </div>
         <h1 id="auth-h" className="h2">{mode === 'signup' ? 'Create your account' : view === 'forgot' ? 'Reset your password' : 'Log in'}</h1>
-        <p className="note auth-note" role="note"><b>Demonstration only.</b> There is no real account system behind this page: email and password are not checked, sent or stored, and are discarded as soon as you continue.</p>
+        {live
+          ? <p className="note auth-note" role="note">Your password is handled by our account service and is never stored in this browser.</p>
+          : <p className="note auth-note" role="note"><b>Demonstration only.</b> There is no real account system behind this page: email and password are not checked, sent or stored, and are discarded as soon as you continue.</p>}
+        {info && <p className="note ok" role="status">{info}</p>}
 
         {mode === 'login' && view === 'email' && (
           <form key="email" className="tab-enter" noValidate onSubmit={(e) => {
@@ -58,13 +63,18 @@ function SignedOut({ route }: { route: Route }) {
             if (!EMAIL.test(email)) x.email = 'Enter a valid email address.';
             if (pw.length < 8) x.pw = 'Use at least 8 characters.';
             setErrs(x); if (Object.keys(x).length) return;
+            if (live) {
+              setBusy(true);
+              void auth.signIn(email.trim(), pw).then((r) => { setBusy(false); setPw(''); if (!r.ok) { setErrs({ pw: r.message }); return; } say('Signed in'); go('/account'); });
+              return;
+            }
             setPw(''); finish({ firstName: nameFrom(email), lastName: '', email, mobile: '' });
           }}>
             <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" aria-invalid={errs.email ? true : undefined} /><Err m={errs.email} /></label>
             <PasswordField id="pw" label="Password" value={pw} onChange={setPw} error={errs.pw} autoComplete="current-password" />
             <div className="row-between"><button type="button" className="linkbtn" onClick={() => { setView('forgot'); setErrs({}); setReset(email); }}>Forgot password?</button></div>
-            <button className="btn btn--dark btn--block" type="submit">Log in</button>
-            <button type="button" className="linkbtn center" onClick={() => { setView('otp'); setErrs({}); }}>Use a mobile code instead</button>
+            <button className="btn btn--dark btn--block" type="submit" disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</button>
+            {!live && <button type="button" className="linkbtn center" onClick={() => { setView('otp'); setErrs({}); }}>Use a mobile code instead</button>}
           </form>
         )}
         {mode === 'login' && view === 'otp' && (
@@ -82,8 +92,8 @@ function SignedOut({ route }: { route: Route }) {
           </form>
         )}
         {mode === 'login' && view === 'forgot' && (
-          <form key="forgot" className="tab-enter" noValidate onSubmit={(e) => { e.preventDefault(); if (!EMAIL.test(reset)) { setErrs({ reset: 'Enter a valid email address.' }); return; } setErrs({}); setResetSent(true); }}>
-            {resetSent ? <p className="note ok" role="status">If an account exists for <b>{reset}</b>, a reset link would be sent now. (Demonstration: no email is sent.)</p> : <>
+          <form key="forgot" className="tab-enter" noValidate onSubmit={(e) => { e.preventDefault(); if (!EMAIL.test(reset)) { setErrs({ reset: 'Enter a valid email address.' }); return; } setErrs({}); if (live) void auth.resetPassword(reset.trim()); setResetSent(true); }}>
+            {resetSent ? <p className="note ok" role="status">If an account exists for <b>{reset}</b>, a reset link {live ? 'is on its way' : 'would be sent now. (Demonstration: no email is sent.)'}</p> : <>
               <p className="muted">Enter your email and we’ll send a link to choose a new password.</p>
               <label>Email<input type="email" value={reset} onChange={(e) => setReset(e.target.value)} autoComplete="email" aria-invalid={errs.reset ? true : undefined} /><Err m={errs.reset} /></label>
               <button className="btn btn--dark btn--block" type="submit">Send reset link</button></>}
@@ -102,6 +112,16 @@ function SignedOut({ route }: { route: Route }) {
             if (reg.pw2 !== reg.pw) x.rp2 = 'Passwords do not match.';
             setErrs(x); if (Object.keys(x).length) return;
             const { pw: _p, pw2: _p2, ...profile } = reg; void _p; void _p2;
+            if (live) {
+              setBusy(true);
+              void auth.signUp({ email: reg.email.trim(), password: reg.pw, firstName: reg.firstName.trim(), lastName: reg.lastName.trim(), mobile: reg.mobile, fit }).then((r) => {
+                setBusy(false); setReg((v) => ({ ...v, pw: '', pw2: '' }));
+                if (!r.ok) { setErrs({ re: r.message }); return; }
+                if (r.needsConfirm) { setInfo(r.message); switchMode('login'); return; }
+                say('Welcome to PLUTONIC'); go('/account');
+              });
+              return;
+            }
             setReg({ ...reg, pw: '', pw2: '' });
             finish({ ...profile, fit });
           }}>
@@ -114,7 +134,7 @@ function SignedOut({ route }: { route: Route }) {
               <PasswordField id="rpw2" label="Confirm password" value={reg.pw2} onChange={(v) => setReg({ ...reg, pw2: v })} error={errs.rp2} autoComplete="new-password" />
             </div>
             <fieldset className="inline"><legend className="lbl">Shop for (optional)</legend>{['Women', 'Men', 'Both'].map((x) => <label key={x} className="check"><input type="radio" name="shopfor" checked={fit === x} onChange={() => setFit(x)} />{x}</label>)}</fieldset>
-            <button className="btn btn--dark btn--block" type="submit">Create account</button>
+            <button className="btn btn--dark btn--block" type="submit" disabled={busy}>{busy ? 'Creating account…' : 'Create account'}</button>
             <button type="button" className="linkbtn center" onClick={() => switchMode('login')}>Already have an account? Log in</button>
           </form>
         )}
@@ -146,7 +166,7 @@ function AddressForm({ initial, onDone }: { initial?: Address; onDone: () => voi
 const TABS: [string, string][] = [['overview', 'Overview'], ['profile', 'Profile'], ['orders', 'Order history'], ['wishlist', 'Wishlist'], ['addresses', 'Saved addresses'], ['returns', 'Returns'], ['settings', 'Settings']];
 
 function Dashboard({ route }: { route: Route }) {
-  const { user, signOut, orders, addresses, removeAddress, wishlist, product, returns, prefs, setPrefs, updateUser, say } = useStore();
+  const { live, user, signOut, orders, addresses, removeAddress, wishlist, product, returns, prefs, setPrefs, updateUser, say } = useStore();
   const tab = TABS.some(([k]) => k === route.query.get('tab')) ? route.query.get('tab')! : 'overview';
   const [editing, setEditing] = useState<Address | 'new' | null>(null);
   const [prof, setProf] = useState({ firstName: user!.firstName, lastName: user!.lastName, email: user!.email, mobile: user!.mobile });
@@ -158,7 +178,7 @@ function Dashboard({ route }: { route: Route }) {
   return (
     <div className="pl-wrap dash">
       <aside className="dash-nav" aria-label="Account">
-        <h1 className="h3">{hello}, {user!.firstName}</h1><span className="muted small">Member since {new Date(user!.since).getFullYear()} · demonstration account</span>
+        <h1 className="h3">{hello}, {user!.firstName}</h1><span className="muted small">Member since {new Date(user!.since).getFullYear()} {live ? '' : ' · demonstration account'}</span>
         <nav>{TABS.map(([k, l]) => <Link key={k} to={`/account?tab=${k}`} aria-current={tab === k ? 'page' : undefined}>{l}</Link>)}<Link to="/tracking">Track an order</Link>
           <button type="button" className="linkbtn" onClick={() => { signOut(); say('Signed out'); go('/'); }}>Sign out</button></nav>
       </aside>
@@ -212,5 +232,7 @@ function Dashboard({ route }: { route: Route }) {
 
 export default function Account({ route }: { route: Route }) {
   const { user } = useStore();
+  const { live, authReady } = useStore();
+  if (live && !authReady && !user) return <div className="pl-wrap" style={{ minHeight: '60vh' }} aria-busy="true" />;
   return user ? <Dashboard route={route} /> : <SignedOut route={route} />;
 }

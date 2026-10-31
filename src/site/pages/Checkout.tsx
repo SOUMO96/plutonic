@@ -43,9 +43,9 @@ export default function Checkout() {
     const address: Address = useSaved ? (useSaved as Address) : { id: 'new', label: 'Home', ...a };
     setBusy(true);
     setDeclined('');
-    window.setTimeout(() => {
+    window.setTimeout(async () => {
       if (outcome === 'declined') { setBusy(false); setDeclined('Simulated payment declined. Nothing was charged and your bag is unchanged. Choose “Approved” in the demo outcome to continue.'); return; }
-      const r = placeOrder({ delivery, payment: pay, address, email, mobile });
+      const r = await placeOrder({ delivery, payment: pay, address, email, mobile });
       setBusy(false);
       if ('error' in r) { say(r.error); return; }
       go('/order/' + r.id);

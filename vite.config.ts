@@ -9,12 +9,12 @@ import {defineConfig, loadEnv, type Plugin} from 'vite';
  * to the browser bundle. On Vercel the real serverless functions are used instead.
  */
 function devApi(env: Record<string, string>): Plugin {
-  for (const k of ['ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'ADMIN_SESSION_SECRET']) if (env[k] && !process.env[k]) process.env[k] = env[k];
+  for (const k of ['ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'ADMIN_SESSION_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL']) if (env[k] && !process.env[k]) process.env[k] = env[k];
   return {
     name: 'plutonic-dev-api',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const m = /^\/api\/admin\/(login|session|logout)\/?(\?.*)?$/.exec(req.url ?? '');
+        const m = /^\/api\/admin\/(login|session|logout|data|mutate)\/?(\?.*)?$/.exec(req.url ?? '');
         if (!m) return next();
         try {
           const mod = await server.ssrLoadModule(`/api/admin/${m[1]}.ts`);

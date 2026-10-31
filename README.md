@@ -44,7 +44,7 @@ After the cinematic intro (first visit only) the site opens on the homepage. It 
 
 ### What is real and what is simulated
 
-This is a front-end implementation. There is **no backend**: sign-in (mobile OTP code `123456`, any email and password), payment, order processing, delivery tracking steps and the admin dashboard are simulated in the browser, and the admin has no authentication. Stock decrements when an order is placed and admin edits (products, stock, coupons, returns, reviews, order status) show up on the storefront immediately, but only in the same browser. Replace `store.tsx` with calls to a real API (auth, inventory, payments, orders) to go live. Legal and policy text, the founding story and support contact details are marked placeholders awaiting your content.
+This storefront is connected to **Supabase** (see "Database" below) when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set; without them it falls back to the original browser-only demo. In that demo mode there is **no backend**: sign-in (mobile OTP code `123456`, any email and password), payment, order processing, delivery tracking steps and the admin dashboard are simulated in the browser, and the admin has no authentication. Stock decrements when an order is placed and admin edits (products, stock, coupons, returns, reviews, order status) show up on the storefront immediately, but only in the same browser. Replace `store.tsx` with calls to a real API (auth, inventory, payments, orders) to go live. Legal and policy text, the founding story and support contact details are marked placeholders awaiting your content.
 
 
 ## Administrator access (server-verified)
@@ -66,3 +66,31 @@ A customer account is never an administrator. The dashboard at `#/admin` is reac
 
 - The dashboard's *data* (products, stock, orders, coupons, edits) still lives in each visitor's browser `localStorage`; it is demonstration data, not centrally secured. Server-side protection covers access to the interface, not that data. A real store needs a database behind admin endpoints that use `requireAdmin`.
 - One administrator account. The login throttle is in-memory per serverless instance; use Vercel Firewall/rate limiting for stronger protection. Sign-out clears the cookie but a copied token stays valid until it expires (max 8 h) or the secret is rotated.
+
+
+## Database (Supabase)
+
+Project `plutonic` (ap-south-1). Schema and policies were applied as migrations `plutonic_core_schema` and `restock_on_cancel`.
+
+- **Tables** (all with row-level security): `products` (public read of active items), `coupons` (no client access), `profiles`, `addresses`, `wishlist` (own rows only), `orders`, `returns` (own rows read-only), `reviews` (public read of Published; signed-in users insert Pending).
+- **Customer sign-in:** Supabase Auth, email + password. Mobile OTP is demo-only and is hidden when the database is connected. Email confirmation follows your Supabase Auth settings.
+- **Orders** are created only by the `place_order` database function, which recomputes prices, coupon discount, shipping and stock from the database and decrements stock atomically. Browsers cannot insert or edit orders, products or coupons. Guests can place orders and look one up with order number + email (`track_order`). Payment is still simulated.
+- **Admin dashboard data** (every order, returns, reviews, coupons, all products) is read and written only through `/api/admin/data` and `/api/admin/mutate`, which require the administrator session described above and use the **service-role key on the server**.
+- No database role or "admin" flag exists that a customer account could be given.
+
+### Environment variables
+
+| Variable | Where | Secret? |
+|---|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | browser + Vercel | No, public by design (RLS protects the data) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Vercel + `.env.local` only | **Yes**, server-only; never prefix with `VITE_` |
+| `SUPABASE_URL` (optional) | server | No; defaults to `VITE_SUPABASE_URL` |
+
+Copy the service-role key from Supabase → Project Settings → API. Without it the admin dashboard shows a "database not configured" banner and saves nothing.
+
+### Limitations
+
+- Products edited in the admin overwrite the whole product record; an admin edit made at the same moment as a customer order could overwrite that order's stock change.
+- Admin image uploads are stored inside the product record as data URLs. Move them to Supabase Storage before adding many photos.
+- Rating averages and review counts on products are static numbers from the catalogue, not computed from reviews.
+- No email is sent for orders, and payment is simulated.
