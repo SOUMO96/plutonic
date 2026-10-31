@@ -25,6 +25,8 @@ const Err = ({ m }: { m?: string }) => (m ? <span className="err small" role="al
 
 function SignedOut({ route }: { route: Route }) {
   const { signIn, say, live, auth } = useStore();
+  const nextRaw = route.query.get('next') ?? '';
+  const next = /^\/[a-z][\w/-]*$/i.test(nextRaw) ? nextRaw : '/account';   // same-site paths only
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState('');
   const [mode, setMode] = useState<'login' | 'signup'>(route.query.get('mode') === 'signup' ? 'signup' : 'login');
@@ -39,7 +41,7 @@ function SignedOut({ route }: { route: Route }) {
   const [reg, setReg] = useState({ firstName: '', lastName: '', email: '', mobile: '', pw: '', pw2: '' });
   const [fit, setFit] = useState('');
   const [errs, setErrs] = useState<Record<string, string>>({});
-  const finish = (u: { firstName: string; lastName: string; email: string; mobile: string; fit?: string }) => { signIn(u); say('Signed in (demonstration)'); go('/account'); };
+  const finish = (u: { firstName: string; lastName: string; email: string; mobile: string; fit?: string }) => { signIn(u); say('Signed in (demonstration)'); go(next); };
   const nameFrom = (e: string) => { const n = e.split('@')[0].replace(/[._-]+/g, ' ').trim(); return n ? n[0].toUpperCase() + n.slice(1) : 'Guest'; };
   const switchMode = (m: 'login' | 'signup') => { setMode(m); setView('email'); setErrs({}); };
 
@@ -51,6 +53,7 @@ function SignedOut({ route }: { route: Route }) {
           <button type="button" role="tab" aria-selected={mode === 'signup'} onClick={() => switchMode('signup')}>Sign up</button>
         </div>
         <h1 id="auth-h" className="h2">{mode === 'signup' ? 'Create your account' : view === 'forgot' ? 'Reset your password' : 'Log in'}</h1>
+        {next === '/checkout' && <p className="note" role="status">Log in or create an account to place your order. Your bag is saved and will be waiting.</p>}
         {live
           ? <p className="note auth-note" role="note">Your password is handled by our account service and is never stored in this browser.</p>
           : <p className="note auth-note" role="note"><b>Demonstration only.</b> There is no real account system behind this page: email and password are not checked, sent or stored, and are discarded as soon as you continue.</p>}
@@ -65,7 +68,7 @@ function SignedOut({ route }: { route: Route }) {
             setErrs(x); if (Object.keys(x).length) return;
             if (live) {
               setBusy(true);
-              void auth.signIn(email.trim(), pw).then((r) => { setBusy(false); setPw(''); if (!r.ok) { setErrs({ pw: r.message }); return; } say('Signed in'); go('/account'); });
+              void auth.signIn(email.trim(), pw).then((r) => { setBusy(false); setPw(''); if (!r.ok) { setErrs({ pw: r.message }); return; } say('Signed in'); go(next); });
               return;
             }
             setPw(''); finish({ firstName: nameFrom(email), lastName: '', email, mobile: '' });
@@ -118,7 +121,7 @@ function SignedOut({ route }: { route: Route }) {
                 setBusy(false); setReg((v) => ({ ...v, pw: '', pw2: '' }));
                 if (!r.ok) { setErrs({ re: r.message }); return; }
                 if (r.needsConfirm) { setInfo(r.message); switchMode('login'); return; }
-                say('Welcome to PLUTONIC'); go('/account');
+                say('Welcome to PLUTONIC'); go(next);
               });
               return;
             }

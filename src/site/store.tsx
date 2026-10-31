@@ -160,6 +160,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [adminStatus, setAdminStatus] = useState<AdminStatus>('idle');
   const [authReady, setAuthReady] = useState(!isLive);
   const uid = useRef<string | null>(null);
+  const hydrateRef = useRef<((u: { id: string; email?: string | null; created_at?: string }) => Promise<void>) | null>(null);
 
   const loadCatalog = useCallback(async () => {
     if (!supabase) return;
@@ -204,6 +205,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         };
       });
     };
+    hydrateRef.current = hydrate;
     void db.auth.getSession().then(async ({ data }) => { if (data.session) await hydrate(data.session.user); setAuthReady(true); });
     const { data: sub } = db.auth.onAuthStateChange((_evt, session) => {
       // Defer: calling supabase from inside this callback can deadlock the auth lock.
@@ -432,6 +434,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
       const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { first_name: firstName, last_name: lastName, mobile } } });
       if (error) return { ok: false, message: error.message };
+      if (data.session && data.user) await hydrateRef.current?.(data.user);
       if (fit && data.session) run(supabase.from('profiles').update({ fit }).eq('id', data.session.user.id));
       // Supabase returns an empty identities list for an email that is already registered.
       if (data.user && data.user.identities?.length === 0) return { ok: false, message: 'An account with this email already exists. Try logging in.' };
@@ -439,7 +442,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     signIn: async (email, password) => {
       if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      // Wait until the account (profile, orders, addresses) is loaded, so the next page already knows who is signed in.
+      if (!error && data.user) await hydrateRef.current?.(data.user);
       return error ? { ok: false, message: /confirm/i.test(error.message) ? 'Please confirm your email first, then log in.' : 'Email or password is not right.' } : { ok: true, message: 'Signed in' };
     },
     resetPassword: async (email) => {

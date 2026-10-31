@@ -16,7 +16,7 @@ Customers sign in with **Supabase Auth** (email + password). Send the access tok
 Authorization: Bearer <supabase access_token>
 ```
 
-Flutter: `supabase_flutter` → `Supabase.instance.client.auth.signInWithPassword(...)`, then use `auth.currentSession!.accessToken` as the bearer token, or call Supabase directly (row-level security gives the same isolation). Guests may browse, check out and track an order (with order number + email).
+Flutter: `supabase_flutter` → `Supabase.instance.client.auth.signInWithPassword(...)`, then use `auth.currentSession!.accessToken` as the bearer token, or call Supabase directly (row-level security gives the same isolation). Guests may browse and look up an order (order number + email), but **placing an order requires a signed-in account**.
 
 ## Endpoints
 
@@ -28,7 +28,7 @@ Flutter: `supabase_flutter` → `Supabase.instance.client.auth.signInWithPasswor
 | `GET /categories` | – | Category list per gender |
 | `GET /coupons/:code` | – | Look up an active coupon (no listing) |
 | `GET /reviews?productId=` | – | Published reviews |
-| `POST /orders` | optional | **Checkout.** Body: `items[{productId,colourId,size,qty}]`, `coupon`, `delivery` (standard/express), `payment` (upi/card/netbanking/cod), `address`, `email`, `mobile`. Prices, discount, shipping and stock are computed on the server; any client prices are ignored. Returns the order |
+| `POST /orders` | yes | **Checkout.** Body: `items[{productId,colourId,size,qty}]`, `coupon`, `delivery` (standard/express), `payment` (upi/card/netbanking/cod), `address`, `email`, `mobile`. Prices, discount, shipping and stock are computed on the server; any client prices are ignored. Returns the order |
 | `GET /orders/track?id=&email=` | – | Guest order lookup (id + email must match) |
 | `GET /orders`, `GET /orders/:id` | yes | The caller's order history / one order (tracking steps are in `step` and `history`) |
 | `POST /orders/:id/cancel` | yes | Cancel before shipping (stock is returned) |

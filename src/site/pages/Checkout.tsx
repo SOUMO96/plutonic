@@ -13,6 +13,9 @@ export default function Checkout() {
   const { cart, product, price, user, addresses, placeOrder, coupon, say, live } = useStore();
   const [gw, setGw] = useState(false);
   useEffect(() => { if (live) void payConfig().then((c) => setGw(c.cashfree)); }, [live]);
+  // Orders need an account: send visitors to log in / sign up, then bring them back here with their bag intact.
+  const { authReady } = useStore();
+  useEffect(() => { if (authReady && !user) { say('Please log in or sign up to place your order.'); go('/account?next=' + encodeURIComponent('/checkout')); } }, [authReady, user, say]);
   const [email, setEmail] = useState(user?.email ?? '');
   const [mobile, setMobile] = useState(user?.mobile ?? '');
   const [saved, setSaved] = useState(addresses[0]?.id ?? 'new');
@@ -68,6 +71,7 @@ export default function Checkout() {
   const err = (k: string) => errs[k] ? <span className="err small" role="alert">{errs[k]}</span> : null;
   const inv = (k: string) => ({ 'aria-invalid': errs[k] ? true : undefined } as const);
 
+  if (!user) return <div className="pl-wrap" style={{ minHeight: '60vh' }} aria-busy="true" />;
   return (
     <div className="checkout">
       <header className="co-head"><div className="pl-wrap co-head-in"><Link to="/" aria-label="PLUTONIC home"><img src={LOGO} alt="PLUTONIC" height={52} /></Link><span className="lbl">Secure checkout</span></div></header>

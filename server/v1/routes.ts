@@ -46,7 +46,7 @@ add('GET', '/reviews', 'none', async ({ db, url }) => {
 });
 
 // ------------------------------------------------------------------ checkout, orders (guest allowed on checkout/track)
-add('POST', '/orders', 'optional', async ({ db, body }) => {
+add('POST', '/orders', 'required', async ({ db, body }) => {
   const b = await body();
   const order = must(await db.rpc('place_order', { p: { items: b.items, coupon: b.coupon, delivery: b.delivery, payment: b.payment, address: b.address, email: b.email, mobile: b.mobile } }));
   return created(order);
