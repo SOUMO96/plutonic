@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Heart, Menu, Search, ShoppingBag, Star, User, X } from 'lucide-react';
 import { discountPercent, FREE_SHIPPING_ABOVE, inr, RETURN_WINDOW_DAYS, sizeStock, totalStock, type Product } from './catalog';
-import { go, Link } from './router';
+import { go, Link, useRoute } from './router';
 import { useStore } from './store';
 
 export const LOGO = '/plutonic-logo-transparent.svg';
@@ -64,7 +64,9 @@ export function WishButton({ id, name }: { id: string; name: string }) {
 export function ProductCard({ p, ratio = '4 / 5', priority = false, showQuick = true, tag }: { p: Product; ratio?: string; priority?: boolean; showQuick?: boolean; tag?: string }) {
   const { addToCart, say } = useStore();
   const out = totalStock(p) === 0;
-  const colourId = p.colours.find((c) => p.sizes.some((s) => sizeStock(p, c.id, s) > 0))?.id ?? p.colours[0].id;
+  const firstAvailable = p.colours.find((c) => p.sizes.some((s) => sizeStock(p, c.id, s) > 0))?.id ?? p.colours[0].id;
+  const [colourId, setColourId] = useState(firstAvailable);
+  const colour = p.colours.find((c) => c.id === colourId) ?? p.colours[0];
   return (
     <article className="card">
       <Link to={`/product/${p.id}`} className="card-link" aria-label={`${p.name}, ${inr(p.price)}`}>
@@ -75,11 +77,13 @@ export function ProductCard({ p, ratio = '4 / 5', priority = false, showQuick = 
       <WishButton id={p.id} name={p.name} />
       {showQuick && !out && (
         <div className="quick" role="group" aria-label={`Quick add ${p.name}`}>
-          <span className="lbl">Quick add</span>
-          <div>
+          <div className="quick-row"><span className="lbl">Colour · <b>{colour.name}</b></span>
+            <span className="quick-sw">{p.colours.map((c) => <button key={c.id} type="button" aria-label={c.name} aria-pressed={c.id === colourId} className={c.id === colourId ? 'on' : ''} style={{ ['--sw' as string]: c.hex } as React.CSSProperties} onClick={() => setColourId(c.id)} />)}</span></div>
+          <span className="lbl">Quick add · size</span>
+          <div className="quick-sizes">
             {p.sizes.map((s) => {
               const n = sizeStock(p, colourId, s);
-              return <button key={s} type="button" disabled={n <= 0} onClick={() => { const r = addToCart(p, colourId, s, 1); say(r.message); }}>{s}</button>;
+              return <button key={s} type="button" disabled={n <= 0} onClick={() => { const r = addToCart(p, colourId, s, 1); say(r.ok ? `${p.name} · ${colour.name} · ${s} added to your bag` : r.message); }}>{s}</button>;
             })}
           </div>
         </div>
@@ -92,93 +96,122 @@ export function ProductCard({ p, ratio = '4 / 5', priority = false, showQuick = 
   );
 }
 
-const NAV = [{ to: '/men', label: 'Men' }, { to: '/women', label: 'Women' }, { to: '/shop?sort=new', label: 'New arrivals' }, { to: '/about', label: 'About' }];
+const NAV = [{ to: '/men', label: 'Men' }, { to: '/women', label: 'Women' }, { to: '/shop?new=1', label: 'New arrivals' }, { to: '/shop', label: 'Shop all' }];
 
-function SearchOverlay({ onClose }: { onClose: () => void }) {
+/** Compact header search: opens in place, focuses itself, Enter opens results, Escape or an outside click closes it. */
+function HeaderSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { products } = useStore();
+  const route = useRoute();
   const [q, setQ] = useState('');
   const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => { ref.current?.focus(); const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    setQ(route.path === '/shop' ? route.query.get('q') ?? '' : '');
+    window.setTimeout(() => ref.current?.focus(), 30);
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const click = (e: MouseEvent) => { const t = e.target as Node; if (box.current && !box.current.contains(t) && !(t as HTMLElement).closest?.('[data-search-toggle]')) onClose(); };
+    window.addEventListener('keydown', key); document.addEventListener('mousedown', click);
+    return () => { window.removeEventListener('keydown', key); document.removeEventListener('mousedown', click); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   const results = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return [];
-    return products.filter((p) => [p.name, p.type, p.category, p.gender, p.detail].join(' ').toLowerCase().includes(t)).slice(0, 8);
+    return products.filter((p) => [p.name, p.type, p.category, p.gender === 'men' ? 'men mens' : 'women womens', p.detail, p.fabric].join(' ').toLowerCase().includes(t));
   }, [q, products]);
-  const submit = () => { if (q.trim()) { go('/shop?q=' + encodeURIComponent(q.trim())); onClose(); } };
+  const submit = () => { const t = q.trim(); if (t) { go('/shop?q=' + encodeURIComponent(t)); onClose(); } };
   return (
-    <div className="overlay" role="dialog" aria-modal="true" aria-label="Search">
-      <div className="overlay-bar pl-wrap">
-        <Search size={20} strokeWidth={1.4} aria-hidden="true" />
-        <input ref={ref} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} placeholder="Search pieces, e.g. leggings, hoodie" aria-label="Search pieces" />
-        <button type="button" className="ico" onClick={onClose} aria-label="Close search"><X size={20} strokeWidth={1.4} /></button>
+    <div ref={box} className={'searchbar' + (open ? ' open' : '')} role="search" aria-hidden={!open}>
+      <div className="pl-wrap searchbar-in">
+        <Search size={18} strokeWidth={1.4} aria-hidden="true" />
+        <input ref={ref} value={q} tabIndex={open ? 0 : -1} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} placeholder="Search pieces, e.g. leggings, hoodie, men" aria-label="Search pieces" enterKeyHint="search" />
+        <button type="button" className="ico" tabIndex={open ? 0 : -1} onClick={onClose} aria-label="Close search"><X size={18} strokeWidth={1.4} /></button>
       </div>
-      <div className="pl-wrap overlay-body">
-        {q.trim() && !results.length && <p className="muted">No pieces match “{q}”. Try “tee”, “short” or “bra”.</p>}
-        {results.map((p) => (
-          <Link key={p.id} to={`/product/${p.id}`} className="result" onClick={onClose}>
-            <Photo p={p} ratio="4 / 5" className="result-img" /><span><b>{p.name}</b><small>{p.gender === 'men' ? 'Men' : 'Women'} · {p.category}</small></span><span>{inr(p.price)}</span>
-          </Link>
-        ))}
-        {q.trim() && results.length > 0 && <button type="button" className="btn btn--ghost" onClick={submit}>See all results</button>}
-      </div>
+      {open && q.trim() && (
+        <div className="pl-wrap searchbar-res">
+          {results.length === 0 && <p className="muted small" role="status">No pieces match “{q.trim()}”. Try “tee”, “short” or “bra”, or <Link to="/shop" onClick={onClose} className="ulink">browse everything</Link>.</p>}
+          {results.slice(0, 5).map((p) => (
+            <Link key={p.id} to={`/product/${p.id}`} className="result" onClick={onClose}>
+              <Photo p={p} ratio="4 / 5" className="result-img" /><span><b>{p.name}</b><small>{p.gender === 'men' ? 'Men' : 'Women'} · {p.category}</small></span><span>{inr(p.price)}</span>
+            </Link>
+          ))}
+          {results.length > 0 && <button type="button" className="btn btn--ghost btn--sm" onClick={submit}>See all {results.length} result{results.length > 1 ? 's' : ''}</button>}
+        </div>
+      )}
     </div>
   );
 }
 
 function MobileMenu({ onClose }: { onClose: () => void }) {
   const { user, cartCount, wishlist } = useStore();
-  useEffect(() => { const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); document.body.style.overflow = 'hidden'; return () => { window.removeEventListener('keydown', k); document.body.style.overflow = ''; }; }, [onClose]);
-  const items = [...NAV, { to: '/wishlist', label: `Wishlist (${wishlist.length})` }, { to: '/cart', label: `Bag (${cartCount})` }, { to: '/account', label: user ? 'My account' : 'Sign in' }, { to: '/tracking', label: 'Track an order' }, { to: '/support', label: 'Support' }];
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    setShown(true);
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k); document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', k); document.body.style.overflow = ''; };
+  }, [onClose]);
+  const items = [...NAV, { to: '/wishlist', label: `Wishlist (${wishlist.length})` }, { to: '/cart', label: `Bag (${cartCount})` }, { to: '/account', label: user ? 'My account' : 'Sign in' }, { to: '/tracking', label: 'Track an order' }, { to: '/about', label: 'About' }, { to: '/support', label: 'Support' }];
   return (
-    <div className="drawer" role="dialog" aria-modal="true" aria-label="Menu">
+    <div className={'drawer' + (shown ? ' open' : '')} role="dialog" aria-modal="true" aria-label="Menu">
       <div className="drawer-head"><img src={LOGO} alt="PLUTONIC" height={44} /><button type="button" className="ico" onClick={onClose} aria-label="Close menu"><X size={22} strokeWidth={1.4} /></button></div>
       <nav className="drawer-nav" aria-label="Mobile">
-        {items.map((i) => <Link key={i.to} to={i.to} onClick={onClose}>{i.label}</Link>)}
+        {items.map((i, n) => <Link key={i.to + n} to={i.to} onClick={onClose} style={{ ['--i' as string]: n } as React.CSSProperties}>{i.label}</Link>)}
       </nav>
     </div>
   );
 }
 
-export function Header({ current }: { current?: string }) {
+export function Header() {
   const { cartCount, wishlist } = useStore();
+  const route = useRoute();
   const [search, setSearch] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => { const on = () => setScrolled(window.scrollY > 8); on(); window.addEventListener('scroll', on, { passive: true }); return () => window.removeEventListener('scroll', on); }, []);
+  const active = (to: string) => {
+    const [path, qs] = to.split('?');
+    if (path !== route.path) return false;
+    if (path === '/shop') return qs ? route.query.get('new') === '1' : route.query.get('new') !== '1';
+    return true;
+  };
   return (
     <>
       <div className="announce" role="note">Complimentary delivery on orders above {inr(FREE_SHIPPING_ABOVE)} · {RETURN_WINDOW_DAYS}-day exchanges</div>
-      <header className="hdr">
+      <header className={'hdr' + (scrolled ? ' scrolled' : '')}>
         <div className="pl-wrap hdr-in">
           <button type="button" className="ico hdr-burger" onClick={() => setMenu(true)} aria-label="Open menu"><Menu size={22} strokeWidth={1.4} /></button>
           <nav aria-label="Primary" className="hdr-nav">
-            {NAV.map((n) => <Link key={n.to} className="lbl" to={n.to} aria-current={current === n.to ? 'page' : undefined}>{n.label}</Link>)}
+            {NAV.map((n) => <Link key={n.to} className="lbl" to={n.to} aria-current={active(n.to) ? 'page' : undefined}>{n.label}</Link>)}
           </nav>
           <Link to="/" className="hdr-logo" aria-label="PLUTONIC home"><img src={LOGO} alt="PLUTONIC" /></Link>
           <div className="hdr-actions">
-            <button type="button" className="ico" onClick={() => setSearch(true)} aria-label="Search"><Search size={20} strokeWidth={1.4} /></button>
+            <button type="button" className="ico" data-search-toggle onClick={() => setSearch((s) => !s)} aria-label="Search" aria-expanded={search}><Search size={20} strokeWidth={1.4} /></button>
             <Link className="ico hdr-hide" to="/account" aria-label="Account"><User size={20} strokeWidth={1.4} /></Link>
             <Link className="ico hdr-hide" to="/wishlist" aria-label={`Wishlist, ${wishlist.length} saved`}><Heart size={20} strokeWidth={1.4} />{wishlist.length > 0 && <i className="dot" />}</Link>
-            <Link className="ico" to="/cart" aria-label={`Bag, ${cartCount} items`}><ShoppingBag size={20} strokeWidth={1.4} />{cartCount > 0 && <i className="count">{cartCount}</i>}</Link>
+            <Link className="ico" to="/cart" aria-label={`Bag, ${cartCount} items`}><ShoppingBag size={20} strokeWidth={1.4} />{cartCount > 0 && <i key={cartCount} className="count bump">{cartCount}</i>}</Link>
           </div>
         </div>
+        <HeaderSearch open={search} onClose={() => setSearch(false)} />
       </header>
-      {search && <SearchOverlay onClose={() => setSearch(false)} />}
       {menu && <MobileMenu onClose={() => setMenu(false)} />}
     </>
   );
 }
 
-export function Footer({ onGateway }: { onGateway?: () => void }) {
+export function Footer({ onReplayIntro }: { onReplayIntro?: () => void }) {
   return (
     <footer className="ftr">
       <div className="pl-wrap ftr-in">
         <img src={LOGO} alt="PLUTONIC" className="ftr-logo" />
         <div className="ftr-cols">
-          <div><span className="lbl">Shop</span><Link to="/men">Men</Link><Link to="/women">Women</Link><Link to="/shop?sort=new">New arrivals</Link><Link to="/wishlist">Wishlist</Link></div>
+          <div><span className="lbl">Shop</span><Link to="/men">Men</Link><Link to="/women">Women</Link><Link to="/shop?new=1">New arrivals</Link><Link to="/shop">Shop all</Link><Link to="/wishlist">Wishlist</Link></div>
           <div><span className="lbl">Help</span><Link to="/tracking">Track an order</Link><Link to="/returns">Returns &amp; exchanges</Link><Link to="/support">Shipping</Link><Link to="/support">Contact us</Link></div>
-          <div><span className="lbl">PLUTONIC</span><Link to="/about">Our story</Link><Link to="/support">Size guide</Link><Link to="/support">Privacy</Link><Link to="/support">Terms</Link>{onGateway && <button type="button" className="linkbtn" onClick={onGateway}>Choose a collection</button>}</div>
+          <div><span className="lbl">PLUTONIC</span><Link to="/about">Our story</Link><Link to="/support">Size guide</Link><Link to="/support">Privacy</Link><Link to="/support">Terms</Link>{onReplayIntro && <button type="button" className="linkbtn" onClick={onReplayIntro}>Replay the welcome film</button>}</div>
         </div>
         <div className="ftr-base"><span>© PLUTONIC. Beyond the ordinary.</span><span>India · ₹ INR · English</span></div>
-        <p className="ftr-demo">Demonstration storefront: products, prices and stock are sample data, not live PLUTONIC inventory.</p>
+        <p className="ftr-demo">Demonstration storefront: products, prices and stock are sample data, and payments and orders are simulated.</p>
       </div>
     </footer>
   );
@@ -186,7 +219,7 @@ export function Footer({ onGateway }: { onGateway?: () => void }) {
 
 export function Toast() {
   const { toast } = useStore();
-  return toast ? <div className="toast" role="status" aria-live="polite">{toast}</div> : null;
+  return toast ? <div key={toast} className="toast" role="status" aria-live="polite">{toast}</div> : null;
 }
 
 export function Crumbs({ items }: { items: { label: string; to?: string }[] }) {

@@ -42,6 +42,7 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
   const [guide, setGuide] = useState(false);
   const [error, setError] = useState('');
   const [sticky, setSticky] = useState(false);
+  const [added, setAdded] = useState(false);
   const buyRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const shots = Math.max(p.shots.length, p.images.length, 1);
@@ -61,7 +62,7 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
     if (!size) { setError('Please choose a size.'); return false; }
     const r = addToCart(p, colourId, size, qty);
     if (!r.ok) { setError(r.message); return false; }
-    setError(''); say(r.message); return true;
+    setError(''); say(`${p.name} · ${colour.name} · ${size}${qty > 1 ? ' × ' + qty : ''} added to your bag`); setAdded(true); window.setTimeout(() => setAdded(false), 1600); return true;
   };
   const checkPin = () => {
     if (!/^[1-8]\d{5}$/.test(pin)) { setPinMsg('Enter a valid 6-digit PIN code.'); return; }
@@ -108,7 +109,7 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
 
           <div className="buy-actions" ref={buyRef}>
             <div className="qty" role="group" aria-label="Quantity"><button type="button" aria-label="Decrease quantity" onClick={() => setQty(Math.max(1, qty - 1))}><Minus size={14} /></button><span>{qty}</span><button type="button" aria-label="Increase quantity" onClick={() => setQty(Math.min(Math.max(left, 1), qty + 1))}><Plus size={14} /></button></div>
-            <button type="button" className="btn btn--dark btn--wide" onClick={add}>{size && left <= 0 ? 'Sold out' : 'Add to bag'}</button>
+            <button type="button" className={'btn btn--dark btn--wide' + (added ? ' is-added' : '')} onClick={add}>{size && left <= 0 ? 'Sold out' : added ? 'Added ✓' : 'Add to bag'}</button>
             <WishButton id={p.id} name={p.name} />
           </div>
           {error && <p className="err" role="alert">{error}</p>}

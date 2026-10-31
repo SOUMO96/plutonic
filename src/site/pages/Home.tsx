@@ -52,7 +52,7 @@ export default function Home() {
 
       <section className="sec">
         <div className="pl-wrap stack-40">
-          <div className="sec-head"><div><span className="lbl muted">New arrivals</span><h2 className="h2">Just in, season one</h2></div><Link className="lbl ulink" to="/shop?sort=new">View all</Link></div>
+          <div className="sec-head"><div><span className="lbl muted">New arrivals</span><h2 className="h2">Just in, season one</h2></div><Link className="lbl ulink" to="/shop?new=1">View all</Link></div>
           <div className="grid grid--4">{fresh.map((p, i) => <ProductCard key={p.id} p={p} priority={i < 2} />)}</div>
         </div>
       </section>

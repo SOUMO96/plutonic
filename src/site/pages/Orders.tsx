@@ -50,17 +50,18 @@ export function Tracking({ route }: { route: Route }) {
 export function Wishlist() {
   const { wishlist, product, toggleWish, addToCart, say, notifyMe, notified } = useStore();
   const [sizes, setSizes] = useState<Record<string, string>>({});
+  const [cols, setCols] = useState<Record<string, string>>({});
   const items = wishlist.map((id) => product(id)).filter((p) => p && p.active);
   return (
     <div className="pl-wrap wish-page">
       <div className="page-head"><h1 className="h1">Wishlist</h1><span className="muted">{items.length} saved</span></div>
       <p className="muted">We’ll let you know if a saved size runs low or a price changes.</p>
       {items.length === 0 ? (
-        <div className="empty"><h2 className="h3">Nothing saved yet.</h2><p className="muted">Tap the heart on any piece to keep it here.</p><Link className="btn btn--dark" to="/shop?sort=new">Browse new arrivals</Link></div>
+        <div className="empty"><h2 className="h3">Nothing saved yet.</h2><p className="muted">Tap the heart on any piece to keep it here.</p><Link className="btn btn--dark" to="/shop?new=1">Browse new arrivals</Link></div>
       ) : (
         <div className="grid grid--4">
           {items.map((p) => {
-            const colour = p!.colours.find((c) => p!.sizes.some((s) => sizeStock(p!, c.id, s) > 0));
+            const colour = p!.colours.find((c) => c.id === cols[p!.id] && p!.sizes.some((s) => sizeStock(p!, c.id, s) > 0)) ?? p!.colours.find((c) => p!.sizes.some((s) => sizeStock(p!, c.id, s) > 0));
             const sold = !colour;
             const sel = sizes[p!.id] ?? '';
             return (
@@ -69,9 +70,11 @@ export function Wishlist() {
                 <button type="button" className="wish on" aria-label={`Remove ${p!.name} from wishlist`} onClick={() => toggleWish(p!.id)}>×</button>
                 <Link to={`/product/${p!.id}`} className="card-meta"><span className="card-top"><span className="card-n">{p!.name}</span><b>{inr(p!.price)}</b></span></Link>
                 {sold ? <button type="button" className="btn btn--ghost btn--sm btn--block" disabled={notified.includes(p!.id)} onClick={() => notifyMe(p!.id)}>{notified.includes(p!.id) ? 'We’ll notify you' : 'Notify me'}</button> : (
-                  <div className="wish-act"><label className="sr" htmlFor={'sz' + p!.id}>Size</label>
+                  <div className="wish-act wish-act--col"><label className="sr" htmlFor={'cl' + p!.id}>Colour</label>
+                    <select id={'cl' + p!.id} value={colour!.id} onChange={(e) => { setCols({ ...cols, [p!.id]: e.target.value }); setSizes({ ...sizes, [p!.id]: '' }); }}>{p!.colours.filter((c) => p!.sizes.some((s) => sizeStock(p!, c.id, s) > 0)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                    <label className="sr" htmlFor={'sz' + p!.id}>Size</label>
                     <select id={'sz' + p!.id} value={sel} onChange={(e) => setSizes({ ...sizes, [p!.id]: e.target.value })}><option value="">Select size</option>{p!.sizes.filter((s) => sizeStock(p!, colour!.id, s) > 0).map((s) => <option key={s}>{s}</option>)}</select>
-                    <button type="button" className="btn btn--dark btn--sm" onClick={() => { if (!sel) { say('Choose a size first.'); return; } const r = addToCart(p!, colour!.id, sel, 1); say(r.message); if (r.ok) toggleWish(p!.id); }}>Move to bag</button></div>
+                    <button type="button" className="btn btn--dark btn--sm" onClick={() => { if (!sel) { say('Choose a size first.'); return; } const r = addToCart(p!, colour!.id, sel, 1); say(r.ok ? `${p!.name} · ${colour!.name} · ${sel} added to your bag` : r.message); if (r.ok) toggleWish(p!.id); }}>Move to bag</button></div>
                 )}
               </article>
             );

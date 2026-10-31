@@ -90,6 +90,7 @@ export type Store = {
   cart: CartLine[]; cartCount: number;
   addToCart: (p: Product, colourId: string, size: string, qty: number) => { ok: boolean; message: string };
   setQty: (key: string, qty: number) => void; removeLine: (key: string) => void;
+  changeVariant: (key: string, colourId: string, size: string) => { ok: boolean; message: string };
   moveToWishlist: (key: string) => void;
   wishlist: string[]; isWished: (id: string) => boolean; toggleWish: (id: string) => void;
   coupon: Coupon | undefined; applyCoupon: (code: string) => { ok: boolean; message: string }; removeCoupon: () => void;
@@ -170,6 +171,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const max = p ? sizeStock(p, l.colourId, l.size) : qty;
     return { ...s, cart: s.cart.map((x) => (x.key === key ? { ...x, qty: Math.max(1, Math.min(qty, max || 1)) } : x)) };
   });
+  const changeVariant: Store['changeVariant'] = (key, colourId, size) => {
+    const l = state.cart.find((x) => x.key === key);
+    const p = l && allProducts.find((x) => x.id === l.productId);
+    if (!l || !p) return { ok: false, message: 'That item is no longer in your bag.' };
+    const have = sizeStock(p, colourId, size);
+    if (have <= 0) return { ok: false, message: 'That combination is sold out.' };
+    const nk = `${p.id}|${colourId}|${size}`;
+    if (nk === key) return { ok: true, message: '' };
+    const merged = (state.cart.find((x) => x.key === nk)?.qty ?? 0) + l.qty;
+    setState((s) => {
+      const target = s.cart.some((x) => x.key === nk);
+      const next = { key: nk, productId: p.id, colourId, size, qty: Math.min(merged, have) };
+      // Keep the line where it was; fold it into an existing identical line if there is one.
+      const cart = target
+        ? s.cart.filter((x) => x.key !== key).map((x) => (x.key === nk ? next : x))
+        : s.cart.map((x) => (x.key === key ? next : x));
+      return { ...s, cart };
+    });
+    return { ok: true, message: `Updated to ${p.colours.find((c) => c.id === colourId)?.name} · ${size}` };
+  };
   const removeLine = (key: string) => setState((s) => ({ ...s, cart: s.cart.filter((l) => l.key !== key) }));
   const moveToWishlist = (key: string) => setState((s) => {
     const l = s.cart.find((x) => x.key === key); if (!l) return s;
@@ -248,7 +269,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value: Store = {
     products, allProducts, product,
-    cart: state.cart, cartCount: state.cart.reduce((n, l) => n + l.qty, 0), addToCart, setQty, removeLine, moveToWishlist,
+    cart: state.cart, cartCount: state.cart.reduce((n, l) => n + l.qty, 0), addToCart, setQty, removeLine, changeVariant, moveToWishlist,
     wishlist: state.wishlist, isWished: (id) => state.wishlist.includes(id), toggleWish,
     coupon, applyCoupon, removeCoupon, price, placeOrder,
     orders: state.orders, advanceOrder, cancelOrder, returns: state.returns, createReturn, setReturnStatus,

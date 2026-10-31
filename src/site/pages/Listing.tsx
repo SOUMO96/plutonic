@@ -1,20 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { CATEGORIES, COLOURS, inr, sizeStock, totalStock, type Product } from '../catalog';
-import { go, Link, type Route } from '../router';
+import { go, Link, recallKey, rememberKey, type Route } from '../router';
 import { useStore } from '../store';
 import { Crumbs, Photo, ProductCard } from '../ui';
 
-type F = { g: string; cat: string[]; size: string[]; colour: string[]; fabric: string[]; price: string[]; q: string; sort: string };
+type F = { isnew: boolean; g: string; cat: string[]; size: string[]; colour: string[]; fabric: string[]; price: string[]; q: string; sort: string };
 const PRICE: Record<string, [number, number, string]> = { u2: [0, 1999, 'Under ₹ 2,000'], m: [2000, 3000, '₹ 2,000 – 3,000'], a3: [3001, 1e9, 'Above ₹ 3,000'] };
 const PAGE = 8;
 
 function parse(q: URLSearchParams): F {
   const many = (k: string) => (q.get(k) ?? '').split(',').filter(Boolean);
-  return { g: q.get('g') ?? '', cat: many('cat'), size: many('size'), colour: many('colour'), fabric: many('fabric'), price: many('price'), q: q.get('q') ?? '', sort: q.get('sort') ?? 'featured' };
+  return { isnew: q.get('new') === '1', g: q.get('g') ?? '', cat: many('cat'), size: many('size'), colour: many('colour'), fabric: many('fabric'), price: many('price'), q: q.get('q') ?? '', sort: q.get('sort') ?? 'featured' };
 }
 function toHash(f: F) {
   const p = new URLSearchParams();
+  if (f.isnew) p.set('new', '1');
   if (f.g) p.set('g', f.g);
   (['cat', 'size', 'colour', 'fabric', 'price'] as const).forEach((k) => f[k].length && p.set(k, f[k].join(',')));
   if (f.q) p.set('q', f.q);
@@ -44,9 +45,12 @@ function Filters({ f, set, all, onClear }: { f: F; set: (n: Partial<F>) => void;
 export default function Listing({ route }: { route: Route }) {
   const { products, notifyMe, notified } = useStore();
   const f = useMemo(() => parse(route.query), [route.query]);
-  const [limit, setLimit] = useState(PAGE);
+  // The URL is the single source of truth for filters; "Load more" depth is remembered per URL for back navigation.
+  const [limit, setLimit] = useState(() => Math.max(PAGE, Number(recallKey('pl-limit')) || PAGE));
+  const lastQuery = useRef(route.query.toString());
   const [sheet, setSheet] = useState(false);
-  useEffect(() => { setLimit(PAGE); }, [route.query]);
+  useEffect(() => { const q = route.query.toString(); if (q === lastQuery.current) return; lastQuery.current = q; setLimit(PAGE); }, [route.query]);
+  useEffect(() => { rememberKey('pl-limit', String(limit)); }, [limit, route.query]);
   useEffect(() => { document.body.style.overflow = sheet ? 'hidden' : ''; return () => { document.body.style.overflow = ''; }; }, [sheet]);
   const set = (n: Partial<F>) => go(toHash({ ...f, ...n }));
 
@@ -55,6 +59,7 @@ export default function Listing({ route }: { route: Route }) {
     const t = f.q.trim().toLowerCase();
     let r = products.filter((p) => {
       if (f.g && p.gender !== f.g) return false;
+      if (f.isnew && !p.isNew) return false;
       if (f.cat.length && !f.cat.includes(p.category)) return false;
       if (f.size.length && !f.size.some((s) => p.colours.some((c) => sizeStock(p, c.id, s) > 0))) return false;
       if (f.colour.length && !f.colour.some((c) => p.colours.some((x) => x.id === c))) return false;
@@ -71,7 +76,7 @@ export default function Listing({ route }: { route: Route }) {
     return r;
   }, [products, f]);
 
-  const title = f.q ? `Results for “${f.q}”` : f.cat.length === 1 ? f.cat[0] : f.g === 'men' ? 'Men' : f.g === 'women' ? 'Women' : f.sort === 'new' ? 'New arrivals' : 'All pieces';
+  const title = f.q ? `Results for “${f.q}”` : f.isnew ? 'New arrivals' : f.cat.length === 1 ? f.cat[0] : f.g === 'men' ? 'Men' : f.g === 'women' ? 'Women' : f.sort === 'new' ? 'New arrivals' : 'All pieces';
   const chips: [string, () => void][] = [
     ...f.cat.map((c): [string, () => void] => [c, () => set({ cat: f.cat.filter((x) => x !== c) })]),
     ...f.size.map((c): [string, () => void] => ['Size ' + c, () => set({ size: f.size.filter((x) => x !== c) })]),
@@ -79,7 +84,7 @@ export default function Listing({ route }: { route: Route }) {
     ...f.fabric.map((c): [string, () => void] => [c, () => set({ fabric: f.fabric.filter((x) => x !== c) })]),
     ...f.price.map((c): [string, () => void] => [PRICE[c][2], () => set({ price: f.price.filter((x) => x !== c) })]),
   ];
-  const clear = () => go('/shop' + (f.g ? '?g=' + f.g : ''));
+  const clear = () => go('/shop' + (f.g ? '?g=' + f.g : f.isnew ? '?new=1' : ''));
   const shown = list.slice(0, limit);
 
   return (
@@ -105,7 +110,7 @@ export default function Listing({ route }: { route: Route }) {
               ) : <ProductCard key={p.id} p={p} ratio="3 / 4" priority={i < 3} />)}
             </div>
           ) : (
-            <div className="empty"><span className="lbl muted">No matches</span><h2 className="h3">Nothing fits those filters yet.</h2><p className="muted">Try removing a size or colour, or browse everything.</p><button className="btn btn--dark" type="button" onClick={clear}>Clear filters</button></div>
+            <div className="empty"><span className="lbl muted">{f.q ? 'No results' : 'No matches'}</span><h2 className="h3">{f.q ? `Nothing matches “${f.q}”.` : 'Nothing fits those filters yet.'}</h2><p className="muted">{f.q ? 'Check the spelling, or try a broader word like “tee”, “short” or “bra”.' : 'Try removing a size or colour, or browse everything.'}</p><div className="row-gap"><button className="btn btn--dark" type="button" onClick={() => go('/shop')}>{f.q ? 'Browse everything' : 'Clear filters'}</button>{f.q && <><Link className="btn btn--ghost" to="/men">Shop men</Link><Link className="btn btn--ghost" to="/women">Shop women</Link></>}</div></div>
           )}
           {list.length > 0 && <div className="more"><span className="muted">Showing {shown.length} of {list.length}</span>{limit < list.length && <button type="button" className="btn btn--ghost" onClick={() => setLimit(limit + PAGE)}>Load more</button>}</div>}
         </div>

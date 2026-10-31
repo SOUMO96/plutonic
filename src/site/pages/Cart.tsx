@@ -6,7 +6,7 @@ import { useStore } from '../store';
 import { Photo } from '../ui';
 
 export default function Cart() {
-  const { cart, product, setQty, removeLine, moveToWishlist, price, coupon, applyCoupon, removeCoupon, cartCount, say } = useStore();
+  const { cart, product, setQty, removeLine, changeVariant, moveToWishlist, price, coupon, applyCoupon, removeCoupon, cartCount, say } = useStore();
   const [code, setCode] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const pr = price();
@@ -29,13 +29,15 @@ export default function Cart() {
         <div className="cart-lines">
           {remaining > 0 ? <p className="note">Add {inr(remaining)} more for complimentary delivery.</p> : <p className="note ok">You have complimentary delivery.</p>}
           {lines.map(({ l, p }) => {
-            const c = p!.colours.find((x) => x.id === l.colourId);
-            const have = sizeStock(p!, l.colourId, l.size);
+                        const have = sizeStock(p!, l.colourId, l.size);
             return (
               <article key={l.key} className="line">
                 <Link to={`/product/${p!.id}`} className="line-img" aria-label={p!.name}><Photo p={p!} ratio="4 / 5" /></Link>
                 <div className="line-body">
-                  <div className="line-top"><div><Link to={`/product/${p!.id}`} className="line-name">{p!.name}</Link><span className="muted small">Colour: {c?.name} · Size: {l.size}</span>{have <= 3 && <span className="warn small">Only {have} left in {l.size}</span>}{l.qty > 1 && <span className="muted small">{inr(p!.price)} each</span>}</div><b>{inr(p!.price * l.qty)}</b></div>
+                  <div className="line-top"><div><Link to={`/product/${p!.id}`} className="line-name">{p!.name}</Link><span className="line-var">
+                    <label><span className="sr">Colour for {p!.name}</span><select value={l.colourId} onChange={(e) => { const r = changeVariant(l.key, e.target.value, l.size); if (r.message) say(r.message); }}>{p!.colours.map((x) => <option key={x.id} value={x.id} disabled={p!.sizes.every((z) => sizeStock(p!, x.id, z) === 0)}>{x.name}</option>)}</select></label>
+                    <label><span className="sr">Size for {p!.name}</span><select value={l.size} onChange={(e) => { const r = changeVariant(l.key, l.colourId, e.target.value); if (r.message) say(r.message); }}>{p!.sizes.map((z) => <option key={z} value={z} disabled={sizeStock(p!, l.colourId, z) === 0}>{z}{sizeStock(p!, l.colourId, z) === 0 ? ' (sold out)' : ''}</option>)}</select></label>
+                  </span>{have <= 3 && <span className="warn small">Only {have} left in {l.size}</span>}{l.qty > 1 && <span className="muted small">{inr(p!.price)} each</span>}</div><b>{inr(p!.price * l.qty)}</b></div>
                   <div className="line-bot">
                     <div className="qty" role="group" aria-label={`Quantity, ${p!.name}`}><button type="button" aria-label={`Decrease quantity, ${p!.name}`} onClick={() => setQty(l.key, l.qty - 1)} disabled={l.qty <= 1}><Minus size={14} /></button><span>{l.qty}</span><button type="button" aria-label={`Increase quantity, ${p!.name}`} onClick={() => setQty(l.key, l.qty + 1)} disabled={l.qty >= have}><Plus size={14} /></button></div>
                     <div className="row-gap"><button type="button" className="linkbtn" onClick={() => { moveToWishlist(l.key); say('Moved to wishlist'); }}>Move to wishlist</button><button type="button" className="linkbtn muted" onClick={() => removeLine(l.key)}>Remove</button></div>

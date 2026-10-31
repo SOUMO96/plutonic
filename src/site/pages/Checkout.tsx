@@ -16,9 +16,8 @@ export default function Checkout() {
   const [a, setA] = useState({ name: user ? `${user.firstName} ${user.lastName}`.trim() : '', mobile: user?.mobile ?? '', line1: '', line2: '', landmark: '', pin: '', city: '', state: '' });
   const [delivery, setDelivery] = useState<'standard' | 'express'>('standard');
   const [pay, setPay] = useState<Pay>('upi');
-  const [upi, setUpi] = useState('');
-  const [card, setCard] = useState({ no: '', exp: '', cvv: '', name: '' });
-  const [bank, setBank] = useState('');
+  const [outcome, setOutcome] = useState<'approved' | 'declined'>('approved');
+  const [declined, setDeclined] = useState('');
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const pr = price(delivery, pay);
@@ -39,18 +38,13 @@ export default function Checkout() {
       if (!a.city.trim()) e.city = 'Enter your city.';
       if (!a.state) e.state = 'Select your state.';
     }
-    if (pay === 'upi' && !/^[\w.\-]{2,}@[a-z]{2,}$/i.test(upi)) e.upi = 'Enter a valid UPI ID, e.g. name@bank.';
-    if (pay === 'card') {
-      if (card.no.replace(/\s/g, '').length < 15) e.card = 'Enter a valid card number.';
-      if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(card.exp)) e.exp = 'Use MM/YY.';
-      if (!/^\d{3,4}$/.test(card.cvv)) e.cvv = 'Enter the CVV.';
-    }
-    if (pay === 'netbanking' && !bank) e.bank = 'Choose your bank.';
     setErrs(e);
     if (Object.keys(e).length) { say('Please fix the highlighted fields.'); document.querySelector('[aria-invalid="true"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
     const address: Address = useSaved ? (useSaved as Address) : { id: 'new', label: 'Home', ...a };
     setBusy(true);
+    setDeclined('');
     window.setTimeout(() => {
+      if (outcome === 'declined') { setBusy(false); setDeclined('Simulated payment declined. Nothing was charged and your bag is unchanged. Choose “Approved” in the demo outcome to continue.'); return; }
       const r = placeOrder({ delivery, payment: pay, address, email, mobile });
       setBusy(false);
       if ('error' in r) { say(r.error); return; }
@@ -96,16 +90,14 @@ export default function Checkout() {
           </section>
 
           <section><h2 className="h3">Payment</h2>
-            <p className="note">Demonstration checkout: no payment is taken and no card details leave this browser.</p>
+            <p className="note" role="note"><b>Simulated payment.</b> No card, UPI or bank details are requested, sent or stored, and nothing is charged. Choose a method and a demo outcome to see the result.</p>
             <div className="opts">
-              <label className="opt-row"><input type="radio" name="pay" checked={pay === 'upi'} onChange={() => setPay('upi')} /><span><b>UPI</b><small>Any UPI app · instant confirmation</small></span></label>
-              {pay === 'upi' && <div className="opt-more"><label>UPI ID<input value={upi} onChange={(e) => setUpi(e.target.value)} placeholder="name@bank" {...inv('upi')} />{err('upi')}</label></div>}
-              <label className="opt-row"><input type="radio" name="pay" checked={pay === 'card'} onChange={() => setPay('card')} /><span><b>Credit or debit card</b><small>Visa · Mastercard · RuPay · Amex</small></span></label>
-              {pay === 'card' && <div className="opt-more fgrid"><label className="span2">Card number<input inputMode="numeric" value={card.no} onChange={(e) => setCard({ ...card, no: e.target.value.replace(/[^\d ]/g, '') })} autoComplete="cc-number" {...inv('card')} />{err('card')}</label><label>Expiry<input value={card.exp} onChange={(e) => setCard({ ...card, exp: e.target.value })} placeholder="MM/YY" autoComplete="cc-exp" {...inv('exp')} />{err('exp')}</label><label>CVV<input inputMode="numeric" maxLength={4} value={card.cvv} onChange={(e) => setCard({ ...card, cvv: e.target.value.replace(/\D/g, '') })} autoComplete="cc-csc" {...inv('cvv')} />{err('cvv')}</label></div>}
-              <label className="opt-row"><input type="radio" name="pay" checked={pay === 'netbanking'} onChange={() => setPay('netbanking')} /><span><b>Net banking</b><small>All major banks</small></span></label>
-              {pay === 'netbanking' && <div className="opt-more"><label>Bank<select value={bank} onChange={(e) => setBank(e.target.value)} {...inv('bank')}><option value="">Choose your bank</option>{['HDFC Bank', 'ICICI Bank', 'State Bank of India', 'Axis Bank', 'Kotak Mahindra Bank'].map((b) => <option key={b}>{b}</option>)}</select>{err('bank')}</label></div>}
-              <label className="opt-row"><input type="radio" name="pay" checked={pay === 'cod'} onChange={() => setPay('cod')} /><span><b>Cash on Delivery</b><small>Pay at your door · {inr(COD_FEE)} handling</small></span></label>
+              {([['upi', 'UPI', 'Any UPI app · instant confirmation'], ['card', 'Credit or debit card', 'Visa · Mastercard · RuPay · Amex'], ['netbanking', 'Net banking', 'All major banks'], ['cod', 'Cash on Delivery', `Pay at your door · ${inr(COD_FEE)} handling`]] as const).map(([k, t, d]) => (
+                <label key={k} className="opt-row"><input type="radio" name="pay" checked={pay === k} onChange={() => setPay(k)} /><span><b>{t}</b><small>{d}</small></span></label>
+              ))}
             </div>
+            <label className="demo-outcome">Demo outcome<select value={outcome} onChange={(e) => { setOutcome(e.target.value as 'approved' | 'declined'); setDeclined(''); }}><option value="approved">Approved</option><option value="declined">Declined</option></select></label>
+            {declined && <p className="err" role="alert">{declined}</p>}
           </section>
         </div>
 
@@ -134,8 +126,8 @@ export function Confirmation({ route }: { route: Route }) {
   if (!o) return <div className="pl-wrap empty-page"><h1 className="h2">We couldn’t find that order.</h1><Link className="btn btn--dark" to="/">Home</Link></div>;
   return (
     <div className="pl-wrap confirm">
-      <span className="lbl muted">Order confirmed</span><h1 className="h1">Thank you.</h1>
-      <p className="body">Your order <b>#{o.id}</b> is confirmed. A confirmation has been sent to {o.email}. This is a demonstration order: nothing was charged or shipped.</p>
+      <span className="check-draw" aria-hidden="true"><svg viewBox="0 0 52 52" width="56" height="56" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="26" cy="26" r="24" /><path d="M15 27l8 8 15-17" /></svg></span><span className="lbl muted">Order confirmed · demonstration</span><h1 className="h1">Thank you.</h1>
+      <p className="body">Your order <b>#{o.id}</b> is confirmed. A confirmation has been sent to {o.email}. This is a demonstration order: the payment was simulated, and nothing was charged, packed or shipped.</p>
       <div className="confirm-card">
         <ul className="co-items">{o.items.map((i) => <li key={i.productId + i.size + i.colourId}><span><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}</small></span><span>{inr(i.price * i.qty)}</span></li>)}</ul>
         <div className="sum-total"><b>Total paid</b><b>{inr(o.total)}</b></div>

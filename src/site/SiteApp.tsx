@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import './site.css';
-import { useRoute } from './router';
+import './motion.css';
+import { consumePendingScroll, useRoute } from './router';
 import { StoreProvider } from './store';
 import { Footer, Header, Toast } from './ui';
 import Home from './pages/Home';
@@ -18,17 +19,50 @@ const Confirmation = lazy(() => import('./pages/Checkout').then((m) => ({ defaul
 const Admin = lazy(() => import('./pages/Admin'));
 
 const DARK = new Set(['', 'men', 'about']);
+/** Elements that ease in as they scroll into view. */
+const REVEAL = '.card, .tile, .edit, .split-tile, .sec-head, .support-card, .values > div, .fabrics > *, .layers > *, .news, .philosophy > *, .about-grid > *, .help-tile, .rev, .line, .panel, .co-form section, .timeline li';
 
-export default function SiteApp({ onGateway }: { onGateway: () => void }) {
+/** Adds `is-in` to reveal targets once they approach the viewport. Content stays visible without JS or with reduced motion. */
+function useScrollReveal(path: string) {
+  useEffect(() => {
+    if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); }
+    }), { rootMargin: '0px 0px -6% 0px', threshold: 0.04 });
+    const scan = () => document.querySelectorAll<HTMLElement>('.pl-main ' + REVEAL.split(', ').join(', .pl-main ')).forEach((el) => {
+      if (el.dataset.rv) return;
+      el.dataset.rv = '1'; el.classList.add('rv');
+      const siblings = el.parentElement ? [...el.parentElement.children].filter((c) => c.matches(REVEAL)) : [];
+      el.style.setProperty('--i', String(Math.min(Math.max(siblings.indexOf(el), 0), 7)));
+      io.observe(el);
+    });
+    scan();
+    const mo = new MutationObserver(scan);
+    const root = document.querySelector('.pl-main');
+    if (root) mo.observe(root, { childList: true, subtree: true });
+    return () => { io.disconnect(); mo.disconnect(); };
+  }, [path]);
+}
+
+export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }) {
   const route = useRoute();
   const root = route.seg[0] ?? '';
   const dark = DARK.has(root);
   const bare = root === 'checkout' || root === 'order' || root === 'admin';
+  const [ready, setReady] = useState(false);
+  const first = useRef(true);
+
+  useEffect(() => { setReady(true); }, []);
+  useScrollReveal(route.path);
 
   useEffect(() => {
     const titles: Record<string, string> = { '': 'Home', men: 'Men', women: 'Women', shop: 'Shop', product: 'Product', cart: 'Your bag', checkout: 'Checkout', order: 'Order confirmed', account: 'Account', tracking: 'Order tracking', wishlist: 'Wishlist', returns: 'Returns & exchanges', admin: 'Admin', about: 'About', support: 'Support' };
     document.title = `PLUTONIC — ${titles[root] ?? 'Beyond the Ordinary'}`;
-  }, [root]);
+    // Back/forward restores the previous scroll position once the page has rendered.
+    const y = consumePendingScroll();
+    if (y !== null) window.requestAnimationFrame(() => window.scrollTo(0, y));
+    first.current = false;
+  }, [root, route.path]);
 
   let page;
   switch (root) {
@@ -52,11 +86,15 @@ export default function SiteApp({ onGateway }: { onGateway: () => void }) {
 
   return (
     <StoreProvider>
-      <div className={'pl ' + (dark ? 'pl--dark' : 'pl--ivory')}>
+      <div className={'pl ' + (dark ? 'pl--dark' : 'pl--ivory') + (ready ? ' pl--ready' : '')}>
         <a className="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById('main')?.focus(); }}>Skip to content</a>
-        {!bare && <Header current={root ? '/' + root : undefined} />}
-        <main id="main" tabIndex={-1}><Suspense fallback={<div className="pl-wrap" style={{ minHeight: '60vh' }} aria-busy="true" />}>{page}</Suspense></main>
-        {!bare && <Footer onGateway={onGateway} />}
+        {!bare && <Header />}
+        <main id="main" className="pl-main" tabIndex={-1}>
+          <div key={route.path} className="page-enter">
+            <Suspense fallback={<div className="pl-wrap" style={{ minHeight: '60vh' }} aria-busy="true" />}>{page}</Suspense>
+          </div>
+        </main>
+        {!bare && <Footer onReplayIntro={onReplayIntro} />}
         <Toast />
       </div>
     </StoreProvider>
