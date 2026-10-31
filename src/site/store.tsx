@@ -106,6 +106,8 @@ export type Auth = {
   signUp: (p: { email: string; password: string; firstName: string; lastName: string; mobile: string; fit?: string }) => Promise<Result & { needsConfirm?: boolean }>;
   signIn: (email: string, password: string) => Promise<Result>;
   resetPassword: (email: string) => Promise<Result>;
+  /** Re-send the sign-up confirmation email (only when the project requires email confirmation). */
+  resendConfirmation: (email: string) => Promise<Result>;
 };
 
 type PriceBreakdown = { subtotal: number; discount: number; shipping: number; codFee: number; total: number; couponLabel?: string };
@@ -439,7 +441,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     signUp: async ({ email, password, firstName, lastName, mobile, fit }) => {
       if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
       const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { first_name: firstName, last_name: lastName, mobile } } });
-      if (error) return { ok: false, message: error.message };
+      if (error) return { ok: false, message: /rate limit/i.test(error.message) ? 'We are sending a lot of sign-up emails right now. Please try again in a few minutes.' : error.message };
       if (data.session && data.user) await hydrateRef.current?.(data.user);
       if (fit && data.session) run(supabase.from('profiles').update({ fit }).eq('id', data.session.user.id));
       // Supabase returns an empty identities list for an email that is already registered.
@@ -452,6 +454,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Wait until the account (profile, orders, addresses) is loaded, so the next page already knows who is signed in.
       if (!error && data.user) await hydrateRef.current?.(data.user);
       return error ? { ok: false, message: /confirm/i.test(error.message) ? 'Please confirm your email first, then log in.' : 'Email or password is not right.' } : { ok: true, message: 'Signed in' };
+    },
+    resendConfirmation: async (email) => {
+      if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
+      const { error } = await supabase.auth.resend({ type: 'signup', email });
+      return error ? { ok: false, message: 'We could not resend the email just now. Please wait a minute and try again.' } : { ok: true, message: 'Confirmation email sent again.' };
     },
     resetPassword: async (email) => {
       if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };

@@ -29,6 +29,7 @@ function SignedOut({ route }: { route: Route }) {
   const next = /^\/[a-z][\w/-]*$/i.test(nextRaw) ? nextRaw : '/account';   // same-site paths only
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState('');
+  const [awaiting, setAwaiting] = useState('');   // email address we are waiting to be confirmed
   const [mode, setMode] = useState<'login' | 'signup'>(route.query.get('mode') === 'signup' ? 'signup' : 'login');
   const [view, setView] = useState<'email' | 'otp' | 'forgot'>('email');
   const [email, setEmail] = useState('');
@@ -104,7 +105,16 @@ function SignedOut({ route }: { route: Route }) {
           </form>
         )}
 
-        {mode === 'signup' && (
+        {mode === 'signup' && awaiting && (
+          <div key="awaiting" className="tab-enter stack-16" role="status">
+            <h2 className="h3">Check your email</h2>
+            <p>We sent a confirmation link to <b>{awaiting}</b>. Open it to activate your account, then log in. Your bag is saved.</p>
+            <button type="button" className="btn btn--dark btn--block" onClick={() => { setEmail(awaiting); setAwaiting(''); switchMode('login'); }}>I’ve confirmed, log in</button>
+            <button type="button" className="linkbtn center" disabled={busy} onClick={() => { setBusy(true); void auth.resendConfirmation(awaiting).then((r) => { setBusy(false); say(r.message); }); }}>Resend the email</button>
+            <button type="button" className="linkbtn center" onClick={() => setAwaiting('')}>Use a different email</button>
+          </div>
+        )}
+        {mode === 'signup' && !awaiting && (
           <form key="signup" className="tab-enter" noValidate onSubmit={(e) => {
             e.preventDefault();
             const x: Record<string, string> = {};
@@ -120,7 +130,7 @@ function SignedOut({ route }: { route: Route }) {
               void auth.signUp({ email: reg.email.trim(), password: reg.pw, firstName: reg.firstName.trim(), lastName: reg.lastName.trim(), mobile: reg.mobile, fit }).then((r) => {
                 setBusy(false); setReg((v) => ({ ...v, pw: '', pw2: '' }));
                 if (!r.ok) { setErrs({ re: r.message }); return; }
-                if (r.needsConfirm) { setInfo(r.message); switchMode('login'); return; }
+                if (r.needsConfirm) { setAwaiting(reg.email.trim()); return; }
                 say('Welcome to PLUTONIC'); go(next);
               });
               return;
