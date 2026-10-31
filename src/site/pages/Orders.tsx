@@ -45,7 +45,8 @@ export function Tracking({ route }: { route: Route }) {
             <div className="row-gap">{o.step >= 0 && o.step < 3 && <button type="button" className="btn btn--ghost btn--sm" onClick={() => { cancelOrder(o.id); say('Order cancelled'); }}>Cancel order</button>}<Link to="/support" className="lbl ulink">Need help with this order?</Link></div>
           </section>
           <aside className="summary"><span className="lbl muted">In this order</span>
-            <ul className="co-items">{o.items.map((i) => <li key={i.productId + i.size + i.colourName}><span><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}</small></span><span>{inr(i.price * i.qty)}</span></li>)}</ul>
+            <ul className="co-items">{o.items.map((i) => <li key={i.productId + i.size + i.colourName} className={i.cancelled ? 'is-cancelled' : undefined}><span><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span>{inr(i.price * i.qty)}</span></li>)}</ul>
+            {o.refundDue ? <p className="note" role="note">A refund of {inr(o.refundDue)} is due for cancelled items{o.cancelReason ? ` (${o.cancelReason})` : ''} and will be returned to your original payment method.</p> : null}
             <div className="sum-total"><b>Total paid</b><b>{inr(o.total)}</b></div>
             <dl className="sum"><div><dt>Payment</dt><dd>{o.payment === 'cod' ? 'Pay on delivery' : 'Paid · ' + o.payment.toUpperCase()}</dd></div><div><dt>Delivery</dt><dd>{o.delivery === 'express' ? 'Express' : 'Standard'}</dd></div><div><dt>Shipping to</dt><dd>{o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}</dd></div></dl>
           </aside>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES, COLOURS, inr, totalStock, type Gender, type Product } from '../catalog';
 import { Link } from '../router';
-import { ORDER_STEPS, useStore, type Coupon } from '../store';
+import { ORDER_STEPS, useStore, type Coupon, type Order } from '../store';
+import { isOnline, itemRefund } from '../orderCancel';
 import { LOGO, Photo } from '../ui';
 import { adminSignOut } from './AdminAccess';
 
@@ -94,11 +95,51 @@ function Bars({ data, unit = '' }: { data: [string, number][]; unit?: string }) 
   return <div className="bars">{data.map(([k, v]) => <div key={k}><span className="small">{k}</span><i style={{ width: `${(v / max) * 100}%` }} /><b className="small">{unit}{v.toLocaleString('en-IN')}</b></div>)}</div>;
 }
 
+
+const CANCEL_REASONS = ['Item out of stock or damaged', 'Customer asked to cancel', 'Payment problem', 'Address or delivery problem', 'Other'];
+
+/** Cancel a whole order, or one item of it. Stock goes back on the shelf; refunds due are recorded on the order. */
+function CancelDialog({ order: o, onClose }: { order: Order; onClose: () => void }) {
+  const s = useStore();
+  const [reason, setReason] = useState(CANCEL_REASONS[0]);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const why = note.trim() ? `${reason}: ${note.trim()}` : reason;
+  const open = o.items.map((i, n) => ({ i, n })).filter((x) => !x.i.cancelled);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
+  const act = async (message: string, fn: () => Promise<boolean>) => { if (!window.confirm(message)) return; setBusy(true); await fn(); setBusy(false); };
+  const online = isOnline(o);
+  return (
+    <div className="cdlg-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="cdlg" role="dialog" aria-modal="true" aria-labelledby="cdlg-h">
+        <div className="row-between"><h2 id="cdlg-h" className="h3">Cancel order #{o.id}</h2><button type="button" className="linkbtn" onClick={onClose}>Close</button></div>
+        <p className="muted small">{o.address.name} · {inr(o.total)} · {o.payment === 'cod' ? 'Pay on delivery (nothing was charged, no refund needed)' : online ? 'Paid online: cancelled items create a refund due' : 'Payment not completed (nothing to refund)'}</p>
+        <label>Reason<select value={reason} onChange={(e) => setReason(e.target.value)}>{CANCEL_REASONS.map((r) => <option key={r}>{r}</option>)}</select></label>
+        <label>Note (optional)<input value={note} maxLength={120} onChange={(e) => setNote(e.target.value)} placeholder="Shown to the customer on their order" /></label>
+        <h3 className="lbl">Cancel one item</h3>
+        <ul className="cdlg-items">
+          {o.items.map((i, n) => (
+            <li key={n} className={i.cancelled ? 'is-cancelled' : undefined}>
+              <span><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty} · {inr(i.price * i.qty)}{i.cancelled ? ' · Cancelled' : ''}</small></span>
+              {!i.cancelled && <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => act(open.length === 1 ? `This is the last open item, so the whole order #${o.id} will be cancelled. Continue?` : `Cancel “${i.name}” (${i.size}) only?${online ? ` A refund of ${inr(itemRefund(o, n))} will be recorded.` : ''} Its stock is returned.`, () => s.adminCancelItem(o.id, n, why))}>{open.length === 1 ? 'Cancel (whole order)' : 'Cancel this item'}</button>}
+            </li>
+          ))}
+        </ul>
+        <div className="cdlg-foot">
+          <button type="button" className="btn btn--dark" disabled={busy} onClick={() => act(`Cancel the WHOLE order #${o.id}? All remaining items are returned to stock${online ? ` and a refund of ${inr(o.total)} is recorded` : ''}.`, () => s.adminCancelOrder(o.id, why))}>{busy ? 'Cancelling…' : 'Cancel the whole order'}</button>
+          <span className="muted small">{online ? `Refund due: ${inr(o.total - (o.refundDue ?? 0))} still to be recorded for the open items.` : ''}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const s = useStore();
   const { enterAdmin, leaveAdmin } = s;
   useEffect(() => { void enterAdmin(); return () => leaveAdmin(); }, [enterAdmin, leaveAdmin]);
   const [sec, setSec] = useState<Section>('Overview');
+  const [cancelFor, setCancelFor] = useState<string | null>(null);
   const [edit, setEdit] = useState<Product | null>(null);
   const [filter, setFilter] = useState('');
   const [cp, setCp] = useState<Coupon>({ code: '', kind: 'percent', value: 10, minSubtotal: 0, active: true, label: '' });
@@ -177,14 +218,15 @@ export default function Admin() {
         {sec === 'Analytics' && <div className="cols"><section className="panel"><h2 className="h3">Revenue by collection</h2><Bars data={byGender} unit="₹ " /></section><section className="panel"><h2 className="h3">Best sellers (units)</h2><Bars data={Object.entries(s.orders.flatMap((o) => o.items).reduce<Record<string, number>>((m, i) => ({ ...m, [i.name]: (m[i.name] ?? 0) + i.qty }), {})).sort((a, b) => b[1] - a[1]).slice(0, 6)} /></section></div>}
       </main>
       {edit && <ProductEditor initial={edit} onClose={() => setEdit(null)} />}
+      {(() => { const o = cancelFor ? s.orders.find((x) => x.id === cancelFor) : undefined; return o && o.step >= 0 && o.step < 4 ? <CancelDialog order={o} onClose={() => setCancelFor(null)} /> : null; })()}
     </div>
   );
 
   function OrdersTable({ limit }: { limit?: number }) {
     return (
       <div className="table-wrap"><table className="tbl tbl--rows"><thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th /></tr></thead><tbody>
-        {s.orders.slice(0, limit ?? 999).map((o) => <tr key={o.id}><td><Link to={'/tracking/' + o.id} className="ulink">#{o.id}</Link></td><td>{o.address.name}</td><td>{o.items.reduce((n, i) => n + i.qty, 0)}</td><td>{inr(o.total)}</td><td>{o.step < 0 ? 'Cancelled' : ORDER_STEPS[o.step]}</td>
-          <td>{o.step >= 0 && o.step < 4 && <button className="linkbtn" type="button" onClick={() => s.advanceOrder(o.id)}>Mark {ORDER_STEPS[o.step + 1].toLowerCase()}</button>}</td></tr>)}</tbody></table></div>
+        {s.orders.slice(0, limit ?? 999).map((o) => <tr key={o.id}><td><Link to={'/tracking/' + o.id} className="ulink">#{o.id}</Link></td><td>{o.address.name}</td><td>{o.items.reduce((n, i) => n + i.qty, 0)}</td><td>{inr(o.total)}</td><td>{o.step < 0 ? 'Cancelled' : ORDER_STEPS[o.step]}{o.step >= 0 && o.items.some((i) => i.cancelled) ? <small className="muted"> · {o.items.filter((i) => i.cancelled).length} item(s) cancelled</small> : null}{o.refundDue ? <small className="warn"> · refund due {inr(o.refundDue)}</small> : null}</td>
+          <td className="row-gap">{o.step >= 0 && o.step < 4 && <button className="linkbtn" type="button" onClick={() => s.advanceOrder(o.id)}>Mark {ORDER_STEPS[o.step + 1].toLowerCase()}</button>}{o.step >= 0 && o.step < 4 && <button className="linkbtn danger" type="button" onClick={() => setCancelFor(o.id)}>Cancel…</button>}</td></tr>)}</tbody></table></div>
     );
   }
 }

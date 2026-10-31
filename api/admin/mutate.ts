@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readJson, requireAdmin, sameOriginJson, send } from '../_lib/adminAuth';
 import { adminDb } from '../_lib/supabaseAdmin';
+import { cancelItem, cancelWhole } from '../../src/site/orderCancel';
 
 /**
  * POST /api/admin/mutate  { op, ...payload } — every administrator write.
@@ -52,17 +53,31 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       const { error: e2 } = await db.from('products').update({ data: { ...data.data, active: b.active } }).eq('id', b.id);
       return e2 ? dbErr() : send(res, 200, { ok: true });
     }
-    case 'order.advance':
-    case 'order.cancel': {
+    case 'order.advance': {
       if (!str(b.id, 40)) return fail('id');
       const { data, error } = await db.from('orders').select('data').eq('id', b.id).maybeSingle();
       if (error) return dbErr(); if (!data) return send(res, 404, { error: 'not_found' });
-      const o = data.data; let next = o;
-      if (b.op === 'order.advance') { if (o.step < 0 || o.step >= 4) return send(res, 409, { error: 'cannot_advance' }); next = { ...o, step: o.step + 1, history: [...(o.history ?? []), Date.now()] }; }
-      else { if (o.step < 0 || o.step >= 3) return send(res, 409, { error: 'cannot_cancel' }); next = { ...o, step: -1 }; }
+      const o = data.data;
+      if (o.step < 0 || o.step >= 4) return send(res, 409, { error: 'cannot_advance' });
+      const next = { ...o, step: o.step + 1, history: [...(o.history ?? []), Date.now()] };
       const { error: e2 } = await db.from('orders').update({ data: next }).eq('id', b.id);
+      return e2 ? dbErr() : send(res, 200, { ok: true });
+    }
+    case 'order.cancel':
+    case 'order.cancelItem': {
+      if (!str(b.id, 40)) return fail('id');
+      const reason = typeof b.reason === 'string' ? b.reason.trim().slice(0, 200) : '';
+      if (b.op === 'order.cancelItem' && !int(b.index, 0, 200)) return fail('index');
+      const { data, error } = await db.from('orders').select('data, payment_status').eq('id', b.id).maybeSingle();
+      if (error) return dbErr(); if (!data) return send(res, 404, { error: 'not_found' });
+      const result = b.op === 'order.cancel' ? cancelWhole(data.data, reason) : cancelItem(data.data, b.index, reason);
+      if (!result) return send(res, 409, { error: 'cannot_cancel' });
+      // Unpaid online orders must not be re-released by the payment-expiry job after this.
+      const patch: Record<string, unknown> = { data: result.order };
+      if (result.whole && data.payment_status === 'pending') patch.payment_status = 'failed';
+      const { error: e2 } = await db.from('orders').update(patch).eq('id', b.id);
       if (e2) return dbErr();
-      if (b.op === 'order.cancel') { const { error: e3 } = await db.rpc('restock_items', { p_items: o.items }); if (e3) return dbErr(); }
+      if (result.restock.length) { const { error: e3 } = await db.rpc('restock_items', { p_items: result.restock }); if (e3) return dbErr(); }
       return send(res, 200, { ok: true });
     }
     case 'return.setStatus': {

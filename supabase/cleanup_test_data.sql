@@ -1,11 +1,11 @@
 -- One-off cleanup of QA data created while testing (run in the Supabase SQL editor, project "plutonic").
 -- Restores stock for every live (non-cancelled) test order, deletes test orders, test reviews and
 -- the *@example.test QA users, and resets order numbers so the first real order is PL-10232.
--- Cancelled orders were already restocked when they were cancelled.
+-- Cancelled orders (and cancelled items) were already restocked when they were cancelled.
 do $$
 declare o record;
 begin
-  for o in select data from public.orders where (data->>'step')::int >= 0 loop perform public.restock_items(o.data->'items'); end loop;
+  for o in select data from public.orders where (data->>'step')::int >= 0 loop perform public.restock_open_items(o.data->'items'); end loop;   -- skips items already cancelled (and restocked)
   delete from public.orders;
   delete from public.reviews;
   delete from auth.users where email like '%@example.test';

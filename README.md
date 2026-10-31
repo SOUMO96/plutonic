@@ -98,3 +98,7 @@ Copy the service-role key from Supabase → Project Settings → API. Without it
 ## REST API for web and future mobile apps
 
 The reusable backend is documented in [API.md](API.md): versioned endpoints under `/api/v1/` (catalogue, carts, wishlist, addresses, orders, returns, reviews, Cashfree payments) that share one Supabase database and one set of accounts with the web storefront, so a Flutter app can connect later without a second backend.
+
+### Cancelling orders (admin)
+
+In the dashboard's Orders list, **Cancel…** opens a dialog to cancel the **whole order** or **one item** (with a reason and optional note). It works until the order is delivered; stock is returned immediately, and cancelling the last open item cancels the whole order. Refunds are only *recorded* (`refundDue` on the order, shown to the admin and the customer): online-paid orders owe the item price minus its share of any coupon discount (the full total, including shipping, when the whole order is cancelled); pay-on-delivery orders owe nothing. Sending the money back still has to be done by an administrator in Cashfree/your bank; there is no automatic refund yet. Rules live in `src/site/orderCancel.ts` and are shared by the browser demo store and `/api/admin/mutate`.

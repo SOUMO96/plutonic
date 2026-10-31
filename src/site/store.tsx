@@ -3,6 +3,7 @@ import {
   baseProducts, COD_FEE, EXPRESS_FEE, FREE_SHIPPING_ABOVE, SHIPPING_FEE, sizeStock,
   type Product,
 } from './catalog';
+import { cancelItem as cancelItemRule, cancelWhole as cancelWholeRule, type Cancelled } from './orderCancel';
 import { isLive, supabase } from './supabase';
 
 /**
@@ -17,7 +18,7 @@ import { isLive, supabase } from './supabase';
 export type CartLine = { key: string; productId: string; colourId: string; size: string; qty: number };
 export type Address = { id: string; label: string; name: string; mobile: string; line1: string; line2: string; landmark: string; pin: string; city: string; state: string };
 export type User = { firstName: string; lastName: string; email: string; mobile: string; since: number; fit?: string };
-export type OrderItem = { productId: string; name: string; colourId: string; colourName: string; size: string; qty: number; price: number };
+export type OrderItem = { productId: string; name: string; colourId: string; colourName: string; size: string; qty: number; price: number; cancelled?: boolean; cancelReason?: string };
 export const ORDER_STEPS = ['Order confirmed', 'Packed', 'Shipped', 'Out for delivery', 'Delivered'] as const;
 export type Order = {
   id: string; createdAt: number; items: OrderItem[];
@@ -28,6 +29,8 @@ export type Order = {
   step: number; history: number[]; sample?: boolean;
   /** Live mode only: simulated (demo), cod, pending (awaiting gateway), paid, failed. */
   paymentStatus?: 'simulated' | 'cod' | 'pending' | 'paid' | 'failed';
+  /** Set when an order or item is cancelled by an administrator. `refundDue` is the amount owed back (online orders only). */
+  cancelReason?: string; cancelledBy?: 'admin' | 'customer'; refundDue?: number;
 };
 export type ReturnReq = { id: string; orderId: string; productName: string; variant: string; kind: 'exchange' | 'return'; reason: string; note: string; status: 'Requested' | 'Approved' | 'Pickup scheduled' | 'Completed' | 'Rejected'; createdAt: number };
 export type Review = { id: string; productId: string; name: string; rating: number; text: string; size: string; fit: string; status: 'Published' | 'Pending' | 'Hidden'; createdAt: number };
@@ -133,6 +136,9 @@ export type Store = {
   /** True when connected to the Supabase database (otherwise the browser-only demo store). */
   live: boolean; authReady: boolean; auth: Auth; lookupOrder: (id: string, email: string) => Promise<Order | null>;
   adminStatus: AdminStatus; enterAdmin: () => Promise<void>; leaveAdmin: () => void;
+  /** Administrator: cancel a whole order, or one item of it (stock is returned). */
+  adminCancelOrder: (id: string, reason: string) => Promise<boolean>;
+  adminCancelItem: (id: string, index: number, reason: string) => Promise<boolean>;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -476,6 +482,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const archiveProduct = (id: string) => { if (adminData) setAdminActive(id, false); else setState((s) => ({ ...s, removed: [...s.removed, id] })); };
   const restoreProduct = (id: string) => { if (adminData) setAdminActive(id, true); else setState((s) => ({ ...s, removed: s.removed.filter((x) => x !== id) })); };
 
+  /** Apply a cancellation result to whichever data set is active; returns false if the rules refuse it. */
+  const adminCancel = async (id: string, op: 'order.cancel' | 'order.cancelItem', args: Record<string, unknown>, compute: (o: Order) => Cancelled | null) => {
+    const current = (adminData ? adminData.orders : state.orders).find((o) => o.id === id);
+    const result = current && compute(current);
+    if (!current || !result) { say('This order can no longer be cancelled.'); return false; }
+    if (adminData) { if (!(await adminCall(op, { id, ...args }))) return false; patchAdmin((d) => ({ ...d, orders: d.orders.map((o) => (o.id === id ? result.order : o)), products: d.products.map((p) => restocked(p, result)) })); }
+    else setState((s) => {
+      const edits = { ...s.edits };
+      for (const p of allProducts) { const np = restocked(edits[p.id] ?? p, result); if (np !== (edits[p.id] ?? p)) edits[p.id] = np; }
+      return { ...s, edits, orders: s.orders.map((o) => (o.id === id ? result.order : o)) };
+    });
+    say(result.whole ? 'Order cancelled and stock returned' : 'Item cancelled and stock returned');
+    return true;
+  };
+  const restocked = (p: Product, r: Cancelled): Product => {
+    const back = r.restock.filter((i) => i.productId === p.id);
+    if (!back.length) return p;
+    const stock = { ...p.stock };
+    for (const i of back) stock[`${i.colourId}:${i.size}`] = (stock[`${i.colourId}:${i.size}`] ?? 0) + i.qty;
+    return { ...p, stock };
+  };
+  const adminCancelOrder: Store['adminCancelOrder'] = (id, reason) => adminCancel(id, 'order.cancel', { reason }, (o) => cancelWholeRule(o, reason));
+  const adminCancelItem: Store['adminCancelItem'] = (id, index, reason) => adminCancel(id, 'order.cancelItem', { index, reason }, (o) => cancelItemRule(o, index, reason));
+
   /** Admin screens load every record through the administrator-only API (needs a verified admin session). */
   const enterAdmin = useCallback(async () => {
     if (!isLive) { setAdminStatus('ready'); return; }
@@ -502,7 +532,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     user: state.user, signIn, signOut, updateUser, addresses: state.addresses, saveAddress, removeAddress,
     coupons: adminData?.coupons ?? state.coupons, saveCoupon, saveProduct, createProduct, archiveProduct, restoreProduct,
     notifyMe, notified: state.notify, prefs: { whatsapp: state.whatsapp, newsletter: state.newsletter }, setPrefs, toast, say,
-    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin,
+    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, adminCancelOrder, adminCancelItem,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
