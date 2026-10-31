@@ -37,7 +37,7 @@ export default function AstroBlackHoleSequence({
   const revealSent = useRef(false);
   const [videoAvailable, setVideoAvailable] = useState(false);
   const [showObservation, setShowObservation] = useState(true);
-  const [videoSrc, setVideoSrc] = useState(() => (
+  const [videoSrc, setVideoSrc] = useState<string>(() => (
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
       ? CLIP.mobileSrc
       : CLIP.desktopSrc
@@ -54,6 +54,14 @@ export default function AstroBlackHoleSequence({
     media.addEventListener?.('change', updateSource);
     return () => media.removeEventListener?.('change', updateSource);
   }, []);
+
+  // The footage is only a backdrop once the store is open: stop decoding it.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (mode === 'store') video.pause();
+    else if (mode === 'categories' && !reducedMotion) video.play().catch(() => undefined);
+  }, [mode, reducedMotion]);
 
   // One animation on every screen: only the plate's uniform magnification adapts.
   useEffect(() => {

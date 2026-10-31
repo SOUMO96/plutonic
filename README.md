@@ -33,10 +33,15 @@ The intro has a skip control and respects `prefers-reduced-motion` (a static loc
 
 The M87* frame is an observational reconstruction. The moving footage is a NASA scientific visualization, not live telescope footage. NASA describes this visualization as a qualitatively correct depiction using a simplified optical model, rather than a full general-relativistic ray-tracing calculation.
 
-## Product catalogue
+## Storefront
 
-Edit `src/data/products.ts` to replace sample products, prices, types, categories, descriptions, and image URLs with the real catalogue.
+After the intro and the FOR HIM / FOR HER gateway the site is a hash-routed storefront (`src/site/`) built from the approved Claude Design canvas ("PLUTONIC — Premium Activewear E-commerce"). Routes: `#/` home, `#/men`, `#/women`, `#/shop` (listing, filters, sort, search), `#/product/:id`, `#/cart`, `#/checkout`, `#/order/:id`, `#/account`, `#/tracking/:id`, `#/wishlist`, `#/returns`, `#/admin`, `#/about`, `#/support`. A shared link such as `https://…/#/product/m2` skips the intro and opens the store directly.
 
-## Commerce integration status
+- `src/site/catalog.ts` is the single product dataset (16 demonstration products, sizes, colours, per-size stock, prices in ₹). Every page reads products through `useStore()`.
+- `src/site/store.tsx` holds cart, wishlist, coupons, orders, returns, reviews, account and admin edits in `localStorage` (key `plutonic-demo-store-v1`).
+- `src/site/pages/` has one file per page; `src/site/site.css` holds the design tokens and responsive rules.
+- Product photographs live in `public/images/` (see `public/images/LICENSES.md`). A product without a photo shows the design's tonal placeholder card. Add files and list them in `images` in `catalog.ts`, or upload them in Admin → Products → Edit.
 
-This branch is a visual and interaction prototype. The starter project did not include live authentication, database-backed inventory, shipping, payment, or checkout services. The bag and wishlist interactions currently run in client-side React state. Real order processing still needs to be connected.
+### What is real and what is simulated
+
+This is a front-end implementation. There is **no backend**: sign-in (mobile OTP code `123456`, any email and password), payment, order processing, delivery tracking steps and the admin dashboard are simulated in the browser, and the admin has no authentication. Stock decrements when an order is placed and admin edits (products, stock, coupons, returns, reviews, order status) show up on the storefront immediately, but only in the same browser. Replace `store.tsx` with calls to a real API (auth, inventory, payments, orders) to go live. Legal and policy text, the founding story and support contact details are marked placeholders awaiting your content.

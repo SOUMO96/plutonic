@@ -1,0 +1,261 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  baseProducts, COD_FEE, EXPRESS_FEE, FREE_SHIPPING_ABOVE, SHIPPING_FEE, sizeStock,
+  type Product,
+} from './catalog';
+
+/**
+ * Client-side commerce state for the demonstration storefront.
+ *
+ * Everything persists in this browser's localStorage under one key. There is no
+ * server: sign-in, OTP, payment and order processing are simulated so every
+ * screen can be exercised end to end. The contracts below are the seams where a
+ * real backend (auth, inventory, payments, orders) would be connected.
+ */
+
+export type CartLine = { key: string; productId: string; colourId: string; size: string; qty: number };
+export type Address = { id: string; label: string; name: string; mobile: string; line1: string; line2: string; landmark: string; pin: string; city: string; state: string };
+export type User = { firstName: string; lastName: string; email: string; mobile: string; since: number; fit?: string };
+export type OrderItem = { productId: string; name: string; colourId: string; colourName: string; size: string; qty: number; price: number };
+export const ORDER_STEPS = ['Order confirmed', 'Packed', 'Shipped', 'Out for delivery', 'Delivered'] as const;
+export type Order = {
+  id: string; createdAt: number; items: OrderItem[];
+  subtotal: number; discount: number; couponCode?: string; shipping: number; codFee: number; total: number;
+  delivery: 'standard' | 'express'; payment: 'upi' | 'card' | 'netbanking' | 'cod';
+  address: Address; email: string; mobile: string;
+  /** Index into ORDER_STEPS reached so far; -1 = cancelled. */
+  step: number; history: number[]; sample?: boolean;
+};
+export type ReturnReq = { id: string; orderId: string; productName: string; variant: string; kind: 'exchange' | 'return'; reason: string; note: string; status: 'Requested' | 'Approved' | 'Pickup scheduled' | 'Completed' | 'Rejected'; createdAt: number };
+export type Review = { id: string; productId: string; name: string; rating: number; text: string; size: string; fit: string; status: 'Published' | 'Pending' | 'Hidden'; createdAt: number };
+export type Coupon = { code: string; kind: 'percent' | 'flat'; value: number; minSubtotal: number; active: boolean; label: string };
+
+type Persisted = {
+  cart: CartLine[]; wishlist: string[]; couponCode: string; user: User | null; addresses: Address[];
+  orders: Order[]; returns: ReturnReq[]; reviews: Review[]; coupons: Coupon[];
+  edits: Record<string, Product>; extra: Product[]; removed: string[];
+  notify: string[]; whatsapp: boolean; newsletter: boolean;
+};
+
+const KEY = 'plutonic-demo-store-v1';
+const DAY = 86_400_000;
+
+const seedCoupons: Coupon[] = [
+  { code: 'WELCOME10', kind: 'percent', value: 10, minSubtotal: 0, active: true, label: '10% off your first order' },
+  { code: 'PLUTONIC500', kind: 'flat', value: 500, minSubtotal: 4000, active: true, label: '₹ 500 off orders above ₹ 4,000' },
+];
+
+function sampleAddress(name: string, city: string, state: string, pin: string): Address {
+  return { id: 'a-' + pin, label: 'Home', name, mobile: '9000000000', line1: 'Sample address line', line2: 'Sample area', landmark: '', pin, city, state };
+}
+const seedOrders = (now: number): Order[] => [
+  mkSeed('PL-10231', now - 2 * DAY, 3, [['m1', 'chalk', 'L', 2], ['w2', 'onyx', 'M', 1]], 'Sample customer', 'Bengaluru', 'Karnataka', '560001'),
+  mkSeed('PL-10230', now - 4 * DAY, 4, [['w1', 'onyx', 'S', 1]], 'Sample customer', 'Mumbai', 'Maharashtra', '400001'),
+  mkSeed('PL-10229', now - 1 * DAY, 1, [['m8', 'onyx', 'L', 1], ['m7', 'basalt', 'M', 1]], 'Sample customer', 'Delhi', 'Delhi', '110001'),
+];
+function mkSeed(id: string, createdAt: number, step: number, lines: [string, string, string, number][], name: string, city: string, state: string, pin: string): Order {
+  const items: OrderItem[] = lines.map(([pid, cid, size, qty]) => {
+    const p = baseProducts.find((x) => x.id === pid)!;
+    return { productId: pid, name: p.name, colourId: cid, colourName: p.colours.find((c) => c.id === cid)?.name ?? cid, size, qty, price: p.price };
+  });
+  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const shipping = subtotal >= FREE_SHIPPING_ABOVE ? 0 : SHIPPING_FEE;
+  return {
+    id, createdAt, items, subtotal, discount: 0, shipping, codFee: 0, total: subtotal + shipping, delivery: 'standard', payment: 'upi',
+    address: sampleAddress(name, city, state, pin), email: 'sample@example.com', mobile: '9000000000', step,
+    history: Array.from({ length: step + 1 }, (_, i) => createdAt + i * 9 * 3_600_000), sample: true,
+  };
+}
+
+function initial(): Persisted {
+  const empty: Persisted = {
+    cart: [], wishlist: [], couponCode: '', user: null, addresses: [], orders: seedOrders(Date.now()), returns: [], reviews: [],
+    coupons: seedCoupons, edits: {}, extra: [], removed: [], notify: [], whatsapp: true, newsletter: false,
+  };
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return empty;
+    return { ...empty, ...(JSON.parse(raw) as Partial<Persisted>) };
+  } catch {
+    return empty;
+  }
+}
+
+type PriceBreakdown = { subtotal: number; discount: number; shipping: number; codFee: number; total: number; couponLabel?: string };
+
+export type Store = {
+  products: Product[];           // active products only (storefront)
+  allProducts: Product[];        // including inactive (admin)
+  product: (id: string) => Product | undefined;
+  cart: CartLine[]; cartCount: number;
+  addToCart: (p: Product, colourId: string, size: string, qty: number) => { ok: boolean; message: string };
+  setQty: (key: string, qty: number) => void; removeLine: (key: string) => void;
+  moveToWishlist: (key: string) => void;
+  wishlist: string[]; isWished: (id: string) => boolean; toggleWish: (id: string) => void;
+  coupon: Coupon | undefined; applyCoupon: (code: string) => { ok: boolean; message: string }; removeCoupon: () => void;
+  price: (delivery?: 'standard' | 'express', payment?: Order['payment']) => PriceBreakdown;
+  placeOrder: (d: { delivery: Order['delivery']; payment: Order['payment']; address: Address; email: string; mobile: string }) => Order | { error: string };
+  orders: Order[]; advanceOrder: (id: string) => void; cancelOrder: (id: string) => void;
+  returns: ReturnReq[]; createReturn: (r: Omit<ReturnReq, 'id' | 'createdAt' | 'status'>) => void; setReturnStatus: (id: string, s: ReturnReq['status']) => void;
+  reviews: Review[]; addReview: (r: Omit<Review, 'id' | 'createdAt' | 'status'>) => void; setReviewStatus: (id: string, s: Review['status']) => void;
+  user: User | null; signIn: (u: Omit<User, 'since'>) => void; signOut: () => void; updateUser: (u: Partial<User>) => void;
+  addresses: Address[]; saveAddress: (a: Omit<Address, 'id'> & { id?: string }) => void; removeAddress: (id: string) => void;
+  coupons: Coupon[]; saveCoupon: (c: Coupon) => void;
+  saveProduct: (p: Product) => void; createProduct: (p: Product) => void; archiveProduct: (id: string) => void; restoreProduct: (id: string) => void;
+  notifyMe: (id: string) => void; notified: string[];
+  prefs: { whatsapp: boolean; newsletter: boolean }; setPrefs: (p: Partial<{ whatsapp: boolean; newsletter: boolean }>) => void;
+  toast: string; say: (m: string) => void;
+};
+
+const Ctx = createContext<Store | null>(null);
+export const useStore = () => {
+  const s = useContext(Ctx);
+  if (!s) throw new Error('StoreProvider missing');
+  return s;
+};
+
+export function StoreProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<Persisted>(initial);
+  const [toast, setToast] = useState('');
+  const toastTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ }
+  }, [state]);
+
+  const say = useCallback((m: string) => {
+    setToast(m);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(''), 2600);
+  }, []);
+
+  const allProducts = useMemo(() => {
+    const merged = [...baseProducts.map((b) => state.edits[b.id] ?? b), ...state.extra.map((e) => state.edits[e.id] ?? e)];
+    return merged.map((p) => ({ ...p, active: p.active && !state.removed.includes(p.id) }));
+  }, [state.edits, state.extra, state.removed]);
+  const products = useMemo(() => allProducts.filter((p) => p.active), [allProducts]);
+  const product = useCallback((id: string) => allProducts.find((p) => p.id === id), [allProducts]);
+
+  const coupon = useMemo(() => state.coupons.find((c) => c.code === state.couponCode && c.active), [state.coupons, state.couponCode]);
+
+  const subtotalOf = useCallback((lines: CartLine[]) => lines.reduce((s, l) => s + (allProducts.find((p) => p.id === l.productId)?.price ?? 0) * l.qty, 0), [allProducts]);
+
+  const price: Store['price'] = useCallback((delivery = 'standard', payment = 'upi') => {
+    const subtotal = subtotalOf(state.cart);
+    let discount = 0;
+    if (coupon && subtotal >= coupon.minSubtotal) discount = coupon.kind === 'percent' ? Math.round(subtotal * coupon.value / 100) : Math.min(coupon.value, subtotal);
+    const after = subtotal - discount;
+    const shipping = state.cart.length === 0 ? 0 : delivery === 'express' ? EXPRESS_FEE : after >= FREE_SHIPPING_ABOVE ? 0 : SHIPPING_FEE;
+    const codFee = payment === 'cod' && state.cart.length ? COD_FEE : 0;
+    return { subtotal, discount, shipping, codFee, total: after + shipping + codFee, couponLabel: coupon?.code };
+  }, [state.cart, coupon, subtotalOf]);
+
+  const addToCart: Store['addToCart'] = (p, colourId, size, qty) => {
+    const have = sizeStock(p, colourId, size);
+    const key = `${p.id}|${colourId}|${size}`;
+    const inBag = state.cart.find((l) => l.key === key)?.qty ?? 0;
+    if (have <= 0) return { ok: false, message: 'That size is sold out in this colour.' };
+    if (inBag + qty > have) return { ok: false, message: `Only ${have} left in ${size}.` };
+    setState((s) => {
+      const found = s.cart.find((l) => l.key === key);
+      const cart = found ? s.cart.map((l) => (l.key === key ? { ...l, qty: l.qty + qty } : l)) : [...s.cart, { key, productId: p.id, colourId, size, qty }];
+      return { ...s, cart };
+    });
+    return { ok: true, message: `${p.name} added to your bag` };
+  };
+
+  const setQty = (key: string, qty: number) => setState((s) => {
+    const l = s.cart.find((x) => x.key === key); if (!l) return s;
+    const p = allProducts.find((x) => x.id === l.productId);
+    const max = p ? sizeStock(p, l.colourId, l.size) : qty;
+    return { ...s, cart: s.cart.map((x) => (x.key === key ? { ...x, qty: Math.max(1, Math.min(qty, max || 1)) } : x)) };
+  });
+  const removeLine = (key: string) => setState((s) => ({ ...s, cart: s.cart.filter((l) => l.key !== key) }));
+  const moveToWishlist = (key: string) => setState((s) => {
+    const l = s.cart.find((x) => x.key === key); if (!l) return s;
+    return { ...s, cart: s.cart.filter((x) => x.key !== key), wishlist: s.wishlist.includes(l.productId) ? s.wishlist : [...s.wishlist, l.productId] };
+  });
+
+  const toggleWish = (id: string) => setState((s) => ({ ...s, wishlist: s.wishlist.includes(id) ? s.wishlist.filter((x) => x !== id) : [...s.wishlist, id] }));
+
+  const applyCoupon: Store['applyCoupon'] = (raw) => {
+    const code = raw.trim().toUpperCase();
+    const c = state.coupons.find((x) => x.code === code);
+    if (!c || !c.active) return { ok: false, message: 'That code is not valid.' };
+    const sub = subtotalOf(state.cart);
+    if (sub < c.minSubtotal) return { ok: false, message: `Add ₹ ${(c.minSubtotal - sub).toLocaleString('en-IN')} more to use ${c.code}.` };
+    setState((s) => ({ ...s, couponCode: c.code }));
+    return { ok: true, message: `${c.code} applied · ${c.label}` };
+  };
+  const removeCoupon = () => setState((s) => ({ ...s, couponCode: '' }));
+
+  const placeOrder: Store['placeOrder'] = (d) => {
+    if (!state.cart.length) return { error: 'Your bag is empty.' };
+    for (const l of state.cart) {
+      const p = allProducts.find((x) => x.id === l.productId);
+      if (!p || sizeStock(p, l.colourId, l.size) < l.qty) return { error: `${p?.name ?? 'An item'} (${l.size}) is no longer available in that quantity.` };
+    }
+    const pr = price(d.delivery, d.payment);
+    const now = Date.now();
+    const nextNumber = Math.max(10231, ...state.orders.map((o) => Number(o.id.replace(/\D/g, '')) || 0)) + 1;
+    const order: Order = {
+      id: 'PL-' + nextNumber, createdAt: now, delivery: d.delivery, payment: d.payment, address: d.address, email: d.email, mobile: d.mobile,
+      items: state.cart.map((l) => {
+        const p = allProducts.find((x) => x.id === l.productId)!;
+        return { productId: p.id, name: p.name, colourId: l.colourId, colourName: p.colours.find((c) => c.id === l.colourId)?.name ?? l.colourId, size: l.size, qty: l.qty, price: p.price };
+      }),
+      subtotal: pr.subtotal, discount: pr.discount, couponCode: pr.discount ? state.couponCode : undefined, shipping: pr.shipping, codFee: pr.codFee, total: pr.total, step: 0, history: [now],
+    };
+    setState((s) => {
+      const edits = { ...s.edits };
+      for (const l of s.cart) {
+        const p = edits[l.productId] ?? allProducts.find((x) => x.id === l.productId)!;
+        edits[l.productId] = { ...p, stock: { ...p.stock, [`${l.colourId}:${l.size}`]: Math.max(0, (p.stock[`${l.colourId}:${l.size}`] ?? 0) - l.qty) } };
+      }
+      return { ...s, edits, orders: [order, ...s.orders], cart: [], couponCode: '', addresses: s.user && !s.addresses.some((a) => a.pin === d.address.pin && a.line1 === d.address.line1) ? [...s.addresses, { ...d.address, id: 'a-' + now }] : s.addresses };
+    });
+    return order;
+  };
+
+  const advanceOrder = (id: string) => setState((s) => ({ ...s, orders: s.orders.map((o) => (o.id === id && o.step >= 0 && o.step < ORDER_STEPS.length - 1 ? { ...o, step: o.step + 1, history: [...o.history, Date.now()] } : o)) }));
+  const cancelOrder = (id: string) => setState((s) => ({ ...s, orders: s.orders.map((o) => (o.id === id && o.step >= 0 && o.step < 3 ? { ...o, step: -1 } : o)) }));
+
+  const createReturn: Store['createReturn'] = (r) => { setState((s) => ({ ...s, returns: [{ ...r, id: 'R-' + (1000 + s.returns.length + 1), createdAt: Date.now(), status: 'Requested' }, ...s.returns] })); say(r.kind === 'exchange' ? 'Exchange requested' : 'Return requested'); };
+  const setReturnStatus = (id: string, status: ReturnReq['status']) => setState((s) => ({ ...s, returns: s.returns.map((r) => (r.id === id ? { ...r, status } : r)) }));
+
+  const addReview: Store['addReview'] = (r) => { setState((s) => ({ ...s, reviews: [{ ...r, id: 'rv-' + Date.now(), createdAt: Date.now(), status: 'Pending' }, ...s.reviews] })); say('Thank you. Your review will appear once moderated.'); };
+  const setReviewStatus = (id: string, status: Review['status']) => setState((s) => ({ ...s, reviews: s.reviews.map((r) => (r.id === id ? { ...r, status } : r)) }));
+
+  const signIn: Store['signIn'] = (u) => setState((s) => ({ ...s, user: { ...u, since: s.user?.since ?? Date.now() } }));
+  const signOut = () => setState((s) => ({ ...s, user: null }));
+  const updateUser: Store['updateUser'] = (u) => setState((s) => (s.user ? { ...s, user: { ...s.user, ...u } } : s));
+
+  const saveAddress: Store['saveAddress'] = (a) => setState((s) => {
+    const full = { ...a, id: a.id ?? 'a-' + Date.now() } as Address;
+    return { ...s, addresses: s.addresses.some((x) => x.id === full.id) ? s.addresses.map((x) => (x.id === full.id ? full : x)) : [...s.addresses, full] };
+  });
+  const removeAddress = (id: string) => setState((s) => ({ ...s, addresses: s.addresses.filter((a) => a.id !== id) }));
+
+  const saveCoupon = (c: Coupon) => setState((s) => ({ ...s, coupons: s.coupons.some((x) => x.code === c.code) ? s.coupons.map((x) => (x.code === c.code ? c : x)) : [...s.coupons, c] }));
+
+  const saveProduct = (p: Product) => setState((s) => ({ ...s, edits: { ...s.edits, [p.id]: p } }));
+  const createProduct = (p: Product) => setState((s) => ({ ...s, extra: [...s.extra, p] }));
+  const archiveProduct = (id: string) => setState((s) => ({ ...s, removed: [...s.removed, id] }));
+  const restoreProduct = (id: string) => setState((s) => ({ ...s, removed: s.removed.filter((x) => x !== id) }));
+
+  const notifyMe = (id: string) => { setState((s) => ({ ...s, notify: s.notify.includes(id) ? s.notify : [...s.notify, id] })); say('We will let you know when it is back.'); };
+  const setPrefs: Store['setPrefs'] = (p) => setState((s) => ({ ...s, whatsapp: p.whatsapp ?? s.whatsapp, newsletter: p.newsletter ?? s.newsletter }));
+
+  const value: Store = {
+    products, allProducts, product,
+    cart: state.cart, cartCount: state.cart.reduce((n, l) => n + l.qty, 0), addToCart, setQty, removeLine, moveToWishlist,
+    wishlist: state.wishlist, isWished: (id) => state.wishlist.includes(id), toggleWish,
+    coupon, applyCoupon, removeCoupon, price, placeOrder,
+    orders: state.orders, advanceOrder, cancelOrder, returns: state.returns, createReturn, setReturnStatus,
+    reviews: state.reviews, addReview, setReviewStatus,
+    user: state.user, signIn, signOut, updateUser, addresses: state.addresses, saveAddress, removeAddress,
+    coupons: state.coupons, saveCoupon, saveProduct, createProduct, archiveProduct, restoreProduct,
+    notifyMe, notified: state.notify, prefs: { whatsapp: state.whatsapp, newsletter: state.newsletter }, setPrefs, toast, say,
+  };
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}

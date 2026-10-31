@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import AstroBlackHoleSequence, { type AstroSceneMode } from './components/AstroBlackHoleSequence';
 import CategorySelect from './components/CategorySelect';
-import Storefront from './components/Storefront';
+import SiteApp from './site/SiteApp';
+import { hasSiteRoute } from './site/router';
 import { BRAND_HOLD_MS, INTRO_SPEED } from './lib/introTiming';
 
 type Stage = 'intro' | 'categories' | 'store';
@@ -32,10 +33,11 @@ function CinematicIntro({
 export default function App() {
   const [stage, setStage] = useState<Stage>(() => {
     if (typeof window === 'undefined') return 'intro';
+    // A shared deep link (e.g. #/product/m2) goes straight to the store.
+    if (hasSiteRoute()) return 'store';
     return window.sessionStorage.getItem('plutonic-intro-seen') === 'yes' ? 'categories' : 'intro';
   });
   const [brandReveal, setBrandReveal] = useState(false);
-  const [category, setCategory] = useState<Category>('him');
   const [categoryLeaving, setCategoryLeaving] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [introArrival, setIntroArrival] = useState(false);
@@ -72,9 +74,9 @@ export default function App() {
   }, []);
 
   const enterCollection = useCallback((next: Category) => {
-    setCategory(next);
     setCategoryLeaving(true);
     transitionTimer.current = window.setTimeout(() => {
+      window.location.hash = next === 'him' ? '#/men' : '#/women';
       setStage('store');
       setCategoryLeaving(false);
     }, 650);
@@ -103,8 +105,8 @@ export default function App() {
           <CategorySelect onSelect={enterCollection} isLeaving={categoryLeaving} introArrival={introArrival && !reducedMotion} />
         )}
         {stage === 'store' && (
-          <div className="store-transition-in">
-            <Storefront category={category} onChangeCategory={() => setStage('categories')} />
+          <div className="site-enter">
+            <SiteApp onGateway={() => { window.history.replaceState(null, '', window.location.pathname); setStage('categories'); }} />
           </div>
         )}
       </main>
