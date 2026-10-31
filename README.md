@@ -94,3 +94,7 @@ Copy the service-role key from Supabase → Project Settings → API. Without it
 - Admin image uploads are stored inside the product record as data URLs. Move them to Supabase Storage before adding many photos.
 - Rating averages and review counts on products are static numbers from the catalogue, not computed from reviews.
 - No email is sent for orders, and payment is simulated.
+
+## REST API for web and future mobile apps
+
+The reusable backend is documented in [API.md](API.md): versioned endpoints under `/api/v1/` (catalogue, carts, wishlist, addresses, orders, returns, reviews, Cashfree payments) that share one Supabase database and one set of accounts with the web storefront, so a Flutter app can connect later without a second backend.

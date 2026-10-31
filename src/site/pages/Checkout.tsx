@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { COD_FEE, EXPRESS_FEE, inr } from '../catalog';
 import { go, Link, type Route } from '../router';
 import { useStore, type Address, type Order } from '../store';
 import { LOGO, Photo } from '../ui';
+import { payConfig, payWithCashfree, verifyPayment } from '../payments';
 
 const STATES = ['Karnataka', 'Maharashtra', 'Delhi', 'Tamil Nadu', 'Telangana', 'Gujarat', 'West Bengal', 'Uttar Pradesh', 'Rajasthan', 'Kerala'];
 const eta = (days: number) => new Date(Date.now() + days * 86_400_000).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 type Pay = Order['payment'];
 
 export default function Checkout() {
-  const { cart, product, price, user, addresses, placeOrder, coupon, say } = useStore();
+  const { cart, product, price, user, addresses, placeOrder, coupon, say, live } = useStore();
+  const [gw, setGw] = useState(false);
+  useEffect(() => { if (live) void payConfig().then((c) => setGw(c.cashfree)); }, [live]);
   const [email, setEmail] = useState(user?.email ?? '');
   const [mobile, setMobile] = useState(user?.mobile ?? '');
   const [saved, setSaved] = useState(addresses[0]?.id ?? 'new');
@@ -43,6 +46,16 @@ export default function Checkout() {
     const address: Address = useSaved ? (useSaved as Address) : { id: 'new', label: 'Home', ...a };
     setBusy(true);
     setDeclined('');
+    if (gw && pay !== 'cod') {
+      // Real payment: create the order (held as pending), then hand over to Cashfree's hosted page.
+      void (async () => {
+        const r = await placeOrder({ delivery, payment: pay, address, email, mobile });
+        if ('error' in r) { setBusy(false); say(r.error); return; }
+        const p = await payWithCashfree(r.id, email);
+        if (!p.ok) { setBusy(false); say(p.message ?? 'Payment could not start.'); go('/order/' + r.id); }
+      })();
+      return;
+    }
     window.setTimeout(async () => {
       if (outcome === 'declined') { setBusy(false); setDeclined('Simulated payment declined. Nothing was charged and your bag is unchanged. Choose “Approved” in the demo outcome to continue.'); return; }
       const r = await placeOrder({ delivery, payment: pay, address, email, mobile });
@@ -90,13 +103,15 @@ export default function Checkout() {
           </section>
 
           <section><h2 className="h3">Payment</h2>
-            <p className="note" role="note"><b>Simulated payment.</b> No card, UPI or bank details are requested, sent or stored, and nothing is charged. Choose a method and a demo outcome to see the result.</p>
+            {gw && pay !== 'cod'
+              ? <p className="note" role="note">You will be taken to Cashfree’s secure page to pay. PLUTONIC never sees or stores your card, UPI or bank details.</p>
+              : <p className="note" role="note"><b>Simulated payment.</b> No card, UPI or bank details are requested, sent or stored, and nothing is charged. Choose a method and a demo outcome to see the result.</p>}
             <div className="opts">
               {([['upi', 'UPI', 'Any UPI app · instant confirmation'], ['card', 'Credit or debit card', 'Visa · Mastercard · RuPay · Amex'], ['netbanking', 'Net banking', 'All major banks'], ['cod', 'Cash on Delivery', `Pay at your door · ${inr(COD_FEE)} handling`]] as const).map(([k, t, d]) => (
                 <label key={k} className="opt-row"><input type="radio" name="pay" checked={pay === k} onChange={() => setPay(k)} /><span><b>{t}</b><small>{d}</small></span></label>
               ))}
             </div>
-            <label className="demo-outcome">Demo outcome<select value={outcome} onChange={(e) => { setOutcome(e.target.value as 'approved' | 'declined'); setDeclined(''); }}><option value="approved">Approved</option><option value="declined">Declined</option></select></label>
+            {!(gw && pay !== 'cod') && <label className="demo-outcome">Demo outcome<select value={outcome} onChange={(e) => { setOutcome(e.target.value as 'approved' | 'declined'); setDeclined(''); }}><option value="approved">Approved</option><option value="declined">Declined</option></select></label>}
             {declined && <p className="err" role="alert">{declined}</p>}
           </section>
         </div>
@@ -112,7 +127,7 @@ export default function Checkout() {
             <div><dt>Tax (GST)</dt><dd className="muted">Included</dd></div>
           </dl>
           <div className="sum-total"><b>To pay</b><b>{inr(pr.total)}</b></div>
-          <button type="button" className="btn btn--dark btn--block btn--lg" onClick={submit} disabled={busy}>{busy ? 'Placing order…' : `Place order · ${inr(pr.total)}`}</button>
+          <button type="button" className="btn btn--dark btn--block btn--lg" onClick={submit} disabled={busy}>{busy ? (gw && pay !== 'cod' ? 'Opening secure payment…' : 'Placing order…') : (gw && pay !== 'cod' ? `Pay ${inr(pr.total)}` : `Place order · ${inr(pr.total)}`)}</button>
           <span className="muted small center">By placing your order you agree to our <Link to="/support" className="ulink">Terms</Link> and <Link to="/support" className="ulink">Privacy Policy</Link>. 14-day exchanges and returns on unworn pieces.</span>
         </aside>
       </div>
@@ -121,16 +136,35 @@ export default function Checkout() {
 }
 
 export function Confirmation({ route }: { route: Route }) {
-  const { orders } = useStore();
+  const { orders, lookupOrder, live } = useStore();
   const o = orders.find((x) => x.id === route.seg[1]);
+  const [retrying, setRetrying] = useState(false);
+  const oid = o?.id, oemail = o?.email, pend = o?.paymentStatus === 'pending';
+  // Returning from the payment page (or reopening a pending order): let the server settle with the gateway, then refresh.
+  useEffect(() => {
+    if (!live || !oid || !oemail || !(pend || route.query.get('cf'))) return;
+    let live2 = true;
+    void verifyPayment(oid).then(() => live2 && lookupOrder(oid, oemail));
+    return () => { live2 = false; };
+  }, [live, oid, oemail, pend, route.query, lookupOrder]);
+  if (o && live && o.paymentStatus === 'pending') return (
+    <div className="pl-wrap confirm"><span className="lbl muted">Order #{o.id}</span><h1 className="h1">Waiting for your payment</h1>
+      <p className="body">We have reserved your items for 30 minutes. If you have already paid, this page updates in a moment. Otherwise you can pay now.</p>
+      <div className="row-gap"><button className="btn btn--dark" type="button" disabled={retrying} onClick={() => { setRetrying(true); void payWithCashfree(o.id, o.email).then((r) => { if (!r.ok) setRetrying(false); }); }}>{retrying ? 'Opening…' : `Pay ${inr(o.total)}`}</button><Link className="btn btn--ghost" to="/shop">Continue shopping</Link></div></div>
+  );
+  if (o && o.paymentStatus === 'failed') return (
+    <div className="pl-wrap confirm"><span className="lbl muted">Order #{o.id}</span><h1 className="h1">Payment not completed</h1>
+      <p className="body">The payment did not go through, so this order was cancelled and nothing was charged. Your items are back in stock. You can try again from your bag.</p>
+      <div className="row-gap"><Link className="btn btn--dark" to="/cart">Back to bag</Link></div></div>
+  );
   if (!o) return <div className="pl-wrap empty-page"><h1 className="h2">We couldn’t find that order.</h1><Link className="btn btn--dark" to="/">Home</Link></div>;
   return (
     <div className="pl-wrap confirm">
       <span className="check-draw" aria-hidden="true"><svg viewBox="0 0 52 52" width="56" height="56" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="26" cy="26" r="24" /><path d="M15 27l8 8 15-17" /></svg></span><span className="lbl muted">Order confirmed · demonstration</span><h1 className="h1">Thank you.</h1>
-      <p className="body">Your order <b>#{o.id}</b> is confirmed. A confirmation has been sent to {o.email}. This is a demonstration order: the payment was simulated, and nothing was charged, packed or shipped.</p>
+      <p className="body">Your order <b>#{o.id}</b> is confirmed.{o.paymentStatus === 'paid' ? ' Payment received.' : ''}{o.paymentStatus === 'paid' || o.paymentStatus === 'cod' ? '' : ` A confirmation has been sent to ${o.email}. This is a demonstration order: the payment was simulated, and nothing was charged, packed or shipped.`}</p>
       <div className="confirm-card">
         <ul className="co-items">{o.items.map((i) => <li key={i.productId + i.size + i.colourId}><span><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}</small></span><span>{inr(i.price * i.qty)}</span></li>)}</ul>
-        <div className="sum-total"><b>Total paid</b><b>{inr(o.total)}</b></div>
+        <div className="sum-total"><b>{o.payment === 'cod' ? 'Total to pay' : 'Total paid'}</b><b>{inr(o.total)}</b></div>
         <p className="muted small">Shipping to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state} · {o.payment === 'cod' ? 'Pay on delivery' : 'Payment confirmed'}</p>
       </div>
       <div className="row-gap"><Link className="btn btn--dark" to={'/tracking/' + o.id}>Track order</Link><Link className="btn btn--ghost" to="/shop">Continue shopping</Link></div>

@@ -26,6 +26,8 @@ export type Order = {
   address: Address; email: string; mobile: string;
   /** Index into ORDER_STEPS reached so far; -1 = cancelled. */
   step: number; history: number[]; sample?: boolean;
+  /** Live mode only: simulated (demo), cod, pending (awaiting gateway), paid, failed. */
+  paymentStatus?: 'simulated' | 'cod' | 'pending' | 'paid' | 'failed';
 };
 export type ReturnReq = { id: string; orderId: string; productName: string; variant: string; kind: 'exchange' | 'return'; reason: string; note: string; status: 'Requested' | 'Approved' | 'Pickup scheduled' | 'Completed' | 'Rejected'; createdAt: number };
 export type Review = { id: string; productId: string; name: string; rating: number; text: string; size: string; fit: string; status: 'Published' | 'Pending' | 'Hidden'; createdAt: number };
