@@ -102,3 +102,7 @@ The reusable backend is documented in [API.md](API.md): versioned endpoints unde
 ### Cancelling orders (admin)
 
 In the dashboard's Orders list, **Cancel…** opens a dialog to cancel the **whole order** or **one item** (with a reason and optional note). It works until the order is delivered; stock is returned immediately, and cancelling the last open item cancels the whole order. Refunds are only *recorded* (`refundDue` on the order, shown to the admin and the customer): online-paid orders owe the item price minus its share of any coupon discount (the full total, including shipping, when the whole order is cancelled); pay-on-delivery orders owe nothing. Sending the money back still has to be done by an administrator in Cashfree/your bank; there is no automatic refund yet. Rules live in `src/site/orderCancel.ts` and are shared by the browser demo store and `/api/admin/mutate`.
+
+### Email verification codes (sign-up)
+
+Sign-up confirms the email with a **6-digit code** (Supabase Auth + `verifyOtp`), not a link. One-time dashboard setup: (1) Authentication > SMTP Settings: enable custom SMTP with a free provider (Brevo, Gmail app password, ...) because Supabase's built-in sender allows only a few emails per hour; (2) Authentication > Email Templates > "Confirm signup": paste `supabase/email-templates/confirm-signup.html` (it must contain `{{ .Token }}`); (3) keep Providers > Email > "Confirm email" ON. Resending a code and signing in with an unconfirmed email both lead to the same code screen.

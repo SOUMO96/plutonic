@@ -30,6 +30,7 @@ function SignedOut({ route }: { route: Route }) {
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState('');
   const [awaiting, setAwaiting] = useState('');   // email address we are waiting to be confirmed
+  const [code, setCode] = useState('');
   const [mode, setMode] = useState<'login' | 'signup'>(route.query.get('mode') === 'signup' ? 'signup' : 'login');
   const [view, setView] = useState<'email' | 'otp' | 'forgot'>('email');
   const [email, setEmail] = useState('');
@@ -69,7 +70,7 @@ function SignedOut({ route }: { route: Route }) {
             setErrs(x); if (Object.keys(x).length) return;
             if (live) {
               setBusy(true);
-              void auth.signIn(email.trim(), pw).then((r) => { setBusy(false); setPw(''); if (!r.ok) { setErrs({ pw: r.message }); return; } say('Signed in'); go(next); });
+              void auth.signIn(email.trim(), pw).then((r) => { setBusy(false); setPw(''); if (!r.ok) { if (r.needsConfirm) { setAwaiting(email.trim()); switchMode('signup'); return; } setErrs({ pw: r.message }); return; } say('Signed in'); go(next); });
               return;
             }
             setPw(''); finish({ firstName: nameFrom(email), lastName: '', email, mobile: '' });
@@ -106,13 +107,19 @@ function SignedOut({ route }: { route: Route }) {
         )}
 
         {mode === 'signup' && awaiting && (
-          <div key="awaiting" className="tab-enter stack-16" role="status">
+          <form key="awaiting" className="tab-enter" noValidate onSubmit={(e) => {
+            e.preventDefault();
+            if (!/^\d{6}$/.test(code)) { setErrs({ code: 'Enter the 6-digit code from your email.' }); return; }
+            setErrs({}); setBusy(true);
+            void auth.verifyEmail(awaiting, code).then((r) => { setBusy(false); if (!r.ok) { setErrs({ code: r.message }); return; } setCode(''); say('Welcome to PLUTONIC'); go(next); });
+          }}>
             <h2 className="h3">Check your email</h2>
-            <p>We sent a confirmation link to <b>{awaiting}</b>. Open it to activate your account, then log in. Your bag is saved.</p>
-            <button type="button" className="btn btn--dark btn--block" onClick={() => { setEmail(awaiting); setAwaiting(''); switchMode('login'); }}>I’ve confirmed, log in</button>
-            <button type="button" className="linkbtn center" disabled={busy} onClick={() => { setBusy(true); void auth.resendConfirmation(awaiting).then((r) => { setBusy(false); say(r.message); }); }}>Resend the email</button>
-            <button type="button" className="linkbtn center" onClick={() => setAwaiting('')}>Use a different email</button>
-          </div>
+            <p>We sent a 6-digit code to <b>{awaiting}</b>. Enter it below to activate your account. Your bag is saved.</p>
+            <label>6-digit code<input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} aria-invalid={errs.code ? true : undefined} autoFocus /><Err m={errs.code} /></label>
+            <button className="btn btn--dark btn--block" type="submit" disabled={busy}>{busy ? 'Checking…' : 'Confirm and continue'}</button>
+            <button type="button" className="linkbtn center" disabled={busy} onClick={() => { setBusy(true); void auth.resendConfirmation(awaiting).then((r) => { setBusy(false); say(r.message); }); }}>Send a new code</button>
+            <button type="button" className="linkbtn center" onClick={() => { setAwaiting(''); setCode(''); setErrs({}); }}>Use a different email</button>
+          </form>
         )}
         {mode === 'signup' && !awaiting && (
           <form key="signup" className="tab-enter" noValidate onSubmit={(e) => {

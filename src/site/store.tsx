@@ -104,7 +104,9 @@ export type AdminStatus = 'idle' | 'loading' | 'ready' | 'error';
 type AdminData = { products: Product[]; orders: Order[]; returns: ReturnReq[]; reviews: Review[]; coupons: Coupon[] };
 export type Auth = {
   signUp: (p: { email: string; password: string; firstName: string; lastName: string; mobile: string; fit?: string }) => Promise<Result & { needsConfirm?: boolean }>;
-  signIn: (email: string, password: string) => Promise<Result>;
+  signIn: (email: string, password: string) => Promise<Result & { needsConfirm?: boolean }>;
+  /** Confirm a new account with the 6-digit code emailed at sign-up; signs the customer in on success. */
+  verifyEmail: (email: string, code: string) => Promise<Result>;
   resetPassword: (email: string) => Promise<Result>;
   /** Re-send the sign-up confirmation email (only when the project requires email confirmation). */
   resendConfirmation: (email: string) => Promise<Result>;
@@ -453,12 +455,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       // Wait until the account (profile, orders, addresses) is loaded, so the next page already knows who is signed in.
       if (!error && data.user) await hydrateRef.current?.(data.user);
-      return error ? { ok: false, message: /confirm/i.test(error.message) ? 'Please confirm your email first, then log in.' : 'Email or password is not right.' } : { ok: true, message: 'Signed in' };
+      if (error && /confirm/i.test(error.message)) return { ok: false, needsConfirm: true, message: 'Please confirm your email with the 6-digit code we sent you.' };
+      return error ? { ok: false, message: 'Email or password is not right.' } : { ok: true, message: 'Signed in' };
+    },
+    verifyEmail: async (email, code) => {
+      if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
+      const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' });
+      if (error || !data.user) return { ok: false, message: 'That code is not right or has expired. Check it, or ask for a new one.' };
+      await hydrateRef.current?.(data.user);   // wait until the account is loaded so the next page knows who is signed in
+      return { ok: true, message: 'Email confirmed' };
     },
     resendConfirmation: async (email) => {
       if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
       const { error } = await supabase.auth.resend({ type: 'signup', email });
-      return error ? { ok: false, message: 'We could not resend the email just now. Please wait a minute and try again.' } : { ok: true, message: 'Confirmation email sent again.' };
+      return error ? { ok: false, message: 'We could not resend the email just now. Please wait a minute and try again.' } : { ok: true, message: 'A new code is on its way.' };
     },
     resetPassword: async (email) => {
       if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
