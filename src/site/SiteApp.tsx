@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import './site.css';
 import './motion.css';
+import './hover.css';
 import { consumePendingScroll, useRoute } from './router';
 import { StoreProvider } from './store';
 import { Footer, Header, Toast } from './ui';

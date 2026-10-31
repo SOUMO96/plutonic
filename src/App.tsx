@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import AstroBlackHoleSequence, { type AstroSceneMode } from './components/AstroBlackHoleSequence';
 import SiteApp from './site/SiteApp';
-import { hasSiteRoute } from './site/router';
+import { hasInnerRoute } from './site/router';
 import { BRAND_HOLD_MS, INTRO_SPEED } from './lib/introTiming';
 
 type Stage = 'intro' | 'store';
 
-const SEEN_KEY = 'plutonic-intro-seen-v2';
-const introSeen = () => { try { return window.localStorage.getItem(SEEN_KEY) === 'yes'; } catch { return false; } };
-const markIntroSeen = () => { try { window.localStorage.setItem(SEEN_KEY, 'yes'); } catch { /* storage unavailable */ } };
 
 /** Time from the brand trigger to the homepage: pull-back, morph, lockup, hold. */
 const INTRO_HOLD_MS = BRAND_HOLD_MS / INTRO_SPEED;
@@ -33,8 +30,9 @@ function CinematicIntro({
 export default function App() {
   const [stage, setStage] = useState<Stage>(() => {
     if (typeof window === 'undefined') return 'intro';
-    // A shared deep link (e.g. #/product/m2) or a returning visitor goes straight to the store.
-    return hasSiteRoute() || introSeen() ? 'store' : 'intro';
+    // The welcome film plays on every fresh load of the site. Only a link to an inner page
+    // (e.g. #/product/m2) goes straight to the store.
+    return hasInnerRoute() ? 'store' : 'intro';
   });
   const [brandReveal, setBrandReveal] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -49,8 +47,7 @@ export default function App() {
 
   // Land on the homepage when the visitor arrives without a route.
   const enterStore = useCallback(() => {
-    markIntroSeen();
-    if (!hasSiteRoute()) window.location.hash = '#/';
+    if (!hasInnerRoute()) window.location.hash = '#/';
     setStage('store');
   }, []);
 
@@ -63,7 +60,6 @@ export default function App() {
   }, [stage, brandReveal, reducedMotion, enterStore]);
 
   const replayIntro = useCallback(() => {
-    try { window.localStorage.removeItem(SEEN_KEY); } catch { /* storage unavailable */ }
     window.location.href = window.location.pathname;
   }, []);
 

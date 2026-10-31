@@ -12,7 +12,8 @@ function read(): Route {
   return { path: path || '/', seg: path.split('/').filter(Boolean), query: new URLSearchParams(qs ?? '') };
 }
 
-export const hasSiteRoute = () => typeof window !== 'undefined' && /^#\//.test(window.location.hash);
+/** True for a link to an inner page such as #/product/m2. The bare home route (#/) does not count. */
+export const hasInnerRoute = () => typeof window !== 'undefined' && /^#\/[^/?#]/.test(window.location.hash);
 
 /**
  * Scroll memory. Back/forward restores where you were (e.g. a filtered listing after
