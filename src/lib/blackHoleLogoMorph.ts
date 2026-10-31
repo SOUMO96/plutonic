@@ -70,7 +70,10 @@ export type LockupLayout = {
 
 export function computeLockupLayout(vw: number, vh: number): LockupLayout {
   const narrow = vw < 700;
-  const markW = narrow ? Math.min(vw * 0.62, 300) : Math.min(vw * 0.3, 400);
+  const portrait = vh > vw;
+  const markW = narrow
+    ? Math.min(vw * 0.62, 300)
+    : portrait ? Math.min(vw * 0.55, 420) : Math.min(vw * 0.3, 400);
   const scale = Math.min(markW / 477, (vh * 0.34) / 235);
   const taglineGap = Math.max(20, 42 * scale);
   const taglineH = narrow ? 10 : 12;

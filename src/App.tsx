@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AstroBlackHoleSequence, { type AstroSceneMode } from './components/AstroBlackHoleSequence';
 import CategorySelect from './components/CategorySelect';
 import Storefront from './components/Storefront';
+import { BRAND_HOLD_MS, INTRO_SPEED } from './lib/introTiming';
 
 type Stage = 'intro' | 'categories' | 'store';
 type Category = 'him' | 'her';
 
 /** Time from the brand trigger to the collection gateway: pull-back, morph, lockup, hold. */
-const INTRO_HOLD_MS = 8700;
-const INTRO_HOLD_REDUCED_MS = 5200;
+const INTRO_HOLD_MS = BRAND_HOLD_MS / INTRO_SPEED;
+const INTRO_HOLD_REDUCED_MS = 3800;
 
 function CinematicIntro({
   revealed,
@@ -37,6 +38,7 @@ export default function App() {
   const [category, setCategory] = useState<Category>('him');
   const [categoryLeaving, setCategoryLeaving] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [introArrival, setIntroArrival] = useState(false);
   const transitionTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -57,6 +59,7 @@ export default function App() {
     if (stage !== 'intro' || !brandReveal) return;
     const timer = window.setTimeout(() => {
       window.sessionStorage.setItem('plutonic-intro-seen', 'yes');
+      setIntroArrival(true);
       setStage('categories');
     }, reducedMotion ? INTRO_HOLD_REDUCED_MS : INTRO_HOLD_MS);
     return () => window.clearTimeout(timer);
@@ -82,7 +85,7 @@ export default function App() {
     : stage;
 
   return (
-    <div className="site-shell">
+    <div className="site-shell" style={{ ['--intro-speed' as string]: INTRO_SPEED }}>
       <main className={`cinematic-experience mode-${mode}`}>
         <AstroBlackHoleSequence
           mode={mode}
@@ -97,7 +100,7 @@ export default function App() {
           />
         )}
         {stage === 'categories' && (
-          <CategorySelect onSelect={enterCollection} isLeaving={categoryLeaving} />
+          <CategorySelect onSelect={enterCollection} isLeaving={categoryLeaving} introArrival={introArrival && !reducedMotion} />
         )}
         {stage === 'store' && (
           <div className="store-transition-in">

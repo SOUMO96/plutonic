@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import type { AstroSceneMode } from './AstroBlackHoleSequence';
+import { INTRO_SPEED } from '../lib/introTiming';
 import {
   LOGO,
   MorphRenderer,
@@ -62,8 +63,12 @@ function viewportLayout() {
   return computeLockupLayout(window.innerWidth, window.innerHeight);
 }
 
+/** Lowered at runtime when the device cannot hold the frame rate. */
+let qualityScale = 1;
+
 function canvasDpr() {
-  return Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.5 : 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.5 : 2);
+  return Math.max(0.75, dpr * qualityScale);
 }
 
 /**
@@ -148,7 +153,7 @@ export default function BlackHoleLogoMorph({ mode, videoRef, footageReady, reduc
     if (!assets && !assetsFailed) return;
     started.current = true;
     const timers: number[] = [];
-    const later = (seconds: number, fn: () => void) => timers.push(window.setTimeout(fn, seconds * 1000));
+    const later = (seconds: number, fn: () => void) => timers.push(window.setTimeout(fn, (seconds * 1000) / INTRO_SPEED));
 
     const runStatic = () => {
       setPhase('static');
@@ -183,10 +188,22 @@ export default function BlackHoleLogoMorph({ mode, videoRef, footageReady, reduc
 
     const vw = video.videoWidth;
     const vh = video.videoHeight;
-    const camera = readPlateCamera(video, footageHole(video.currentTime, vw, vh));
+    const startHole = footageHole(video.currentTime, vw, vh);
+    let camera = readPlateCamera(video, startHole);
+    const plateHost = video.parentElement;
+    const viewSignature = () =>
+      `${window.innerWidth}x${window.innerHeight}:${plateHost?.style.getPropertyValue('--plate-k') ?? ''}`;
+    let lastSignature = viewSignature();
+    // When the viewport changes mid-animation the plate is re-framed and the
+    // camera is re-read from it. The difference is eased out so nothing jumps.
+    let blendOffset = { x: 0, y: 0, logK: 0 };
+    let blendPending = false;
+    let lastOut: { x: number; y: number; k: number } | null = null;
+    let lastFrameAt = performance.now();
+    const slowFrames = { n: 0, sum: 0 };
     const t0 = performance.now();
     let raf = 0;
-    let rate = 1;
+    let rate = INTRO_SPEED;
     let videoCallback = 0;
     let canvasShown = false;
 
@@ -200,7 +217,7 @@ export default function BlackHoleLogoMorph({ mode, videoRef, footageReady, reduc
     };
     const hasFrameCallback = 'requestVideoFrameCallback' in video;
     const onVideoFrame = (now: number, meta: VideoFrameCallbackMetadata) => {
-      if ((now - t0) / 1000 > TIMELINE.morphEnd + 0.2) return;
+      if (((now - t0) / 1000) * INTRO_SPEED > TIMELINE.morphEnd + 0.2) return;
       try {
         renderer.pushVideoFrame(video);
       } catch {
@@ -221,7 +238,7 @@ export default function BlackHoleLogoMorph({ mode, videoRef, footageReady, reduc
 
     const frame = (now: number) => {
       const hold = devHold();
-      const t = hold ?? (now - t0) / 1000;
+      const t = hold ?? ((now - t0) / 1000) * INTRO_SPEED;
       const L = layoutRef.current;
       let frameMix = 1;
       let mediaTime = video.currentTime;
@@ -236,6 +253,13 @@ export default function BlackHoleLogoMorph({ mode, videoRef, footageReady, reduc
         }
       }
       const hole = footageHole(mediaTime, vw, vh);
+
+      const signature = viewSignature();
+      if (signature !== lastSignature) {
+        lastSignature = signature;
+        camera = readPlateCamera(video, startHole);
+        blendPending = true;
+      }
 
       // Phase B — the camera pulls back and settles the hole onto the mark's centre.
       const pull = easeInOutCubic(clamp01(t / TIMELINE.pullEnd));
@@ -253,14 +277,46 @@ export default function BlackHoleLogoMorph({ mode, videoRef, footageReady, reduc
       );
       const drift = pull * (1 - release);
 
+      let outX = lerp(camera.x, L.ringX, pull);
+      let outY = lerp(camera.y, L.ringY, pull);
+      let outK = k;
+      if (blendPending && lastOut) {
+        blendOffset = {
+          x: lastOut.x - outX,
+          y: lastOut.y - outY,
+          logK: Math.log(lastOut.k) - Math.log(outK),
+        };
+      }
+      blendPending = false;
+      const dt = Math.min((now - lastFrameAt) / 1000, 0.1);
+      lastFrameAt = now;
+      // Adaptive resolution: if frames are slow, render fewer pixels. The
+      // animation clock is wall-time based, so this only affects sharpness.
+      slowFrames.n += 1;
+      slowFrames.sum += dt;
+      if (slowFrames.n >= 10) {
+        if (slowFrames.sum / slowFrames.n > 0.026 && qualityScale > 0.5) {
+          qualityScale *= 0.8;
+          renderer.resize(window.innerWidth, window.innerHeight, canvasDpr());
+        }
+        slowFrames.n = 0;
+        slowFrames.sum = 0;
+      }
+      const decay = Math.exp(-dt / 0.16);
+      blendOffset = { x: blendOffset.x * decay, y: blendOffset.y * decay, logK: blendOffset.logK * decay };
+      outX += blendOffset.x;
+      outY += blendOffset.y;
+      outK *= Math.exp(blendOffset.logK);
+      lastOut = { x: outX, y: outY, k: outK };
+
       const uniforms: FrameUniforms = {
-        bhX: lerp(camera.x, L.ringX, pull),
-        bhY: lerp(camera.y, L.ringY, pull),
-        k,
+        bhX: outX,
+        bhY: outY,
+        k: outK,
         theta: lerp(camera.theta, -LOGO.slashAngle, pull),
         anchorX: hole.x,
         anchorY: hole.y,
-        shadowPx: hole.radius * k,
+        shadowPx: hole.radius * outK,
         fadeR: Math.exp(lerp(Math.log(60), Math.log(6.5), easeOutCubic(clamp01(t / TIMELINE.pullEnd)))),
         layout: L,
         morph,
@@ -273,8 +329,8 @@ export default function BlackHoleLogoMorph({ mode, videoRef, footageReady, reduc
       if (!canvasShown) { canvasShown = true; setCanvasOn(true); }
 
       // Time dilation: the footage slows continuously as the hole gives up its shape.
-      const nextRate = lerp(1, 0.45, smoothstep(0.4, 3.8, t));
-      if (Math.abs(nextRate - rate) > 0.05) { rate = nextRate; video.playbackRate = rate; }
+      const nextRate = lerp(1, 0.45, smoothstep(0.4, 3.8, t)) * INTRO_SPEED;
+      if (Math.abs(nextRate - rate) > 0.05 * INTRO_SPEED) { rate = nextRate; video.playbackRate = rate; }
 
       if (!nameShown && t >= TIMELINE.name) { nameShown = true; setNameIn(true); }
       if (!punchlineShown && t >= TIMELINE.punchline) { punchlineShown = true; setPunchlineIn(true); }
@@ -282,6 +338,10 @@ export default function BlackHoleLogoMorph({ mode, videoRef, footageReady, reduc
       if (t < TIMELINE.settleEnd || hold !== undefined) {
         raf = requestAnimationFrame(frame);
       } else {
+        // The loop ends at settleEnd, just before the punchline's own cue, so
+        // make sure that cue is not lost.
+        if (!nameShown) { nameShown = true; setNameIn(true); }
+        if (!punchlineShown) { punchlineShown = true; setPunchlineIn(true); }
         finalFrame.current = { ...uniforms, morph: 1, settleScale: 1, settleRot: 0, frameMix: 1, bhX: L.ringX, bhY: L.ringY };
         renderer.render(finalFrame.current);
       }

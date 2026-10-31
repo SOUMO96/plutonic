@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import BlackHoleLogoMorph from './BlackHoleLogoMorph';
+import { computePlateScale } from '../lib/plateFrame';
+import { INTRO_SPEED } from '../lib/introTiming';
 
 export type AstroSceneMode = 'intro' | 'brand' | 'categories' | 'store';
 
@@ -29,6 +31,7 @@ export default function AstroBlackHoleSequence({
   reducedMotion = false,
   onBrandReveal,
 }: Props) {
+  const sceneRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fallbackUsed = useRef(false);
   const revealSent = useRef(false);
@@ -52,10 +55,31 @@ export default function AstroBlackHoleSequence({
     return () => media.removeEventListener?.('change', updateSource);
   }, []);
 
+  // One animation on every screen: only the plate's uniform magnification adapts.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const apply = () => {
+      const { width, height } = scene.getBoundingClientRect();
+      scene.style.setProperty('--plate-k', computePlateScale(width, height).toFixed(4));
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(scene);
+    window.addEventListener('resize', apply);
+    window.visualViewport?.addEventListener('resize', apply);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', apply);
+      window.visualViewport?.removeEventListener('resize', apply);
+    };
+  }, []);
+
   useEffect(() => {
     if (reducedMotion) return;
     const video = videoRef.current;
     if (!video) return;
+    video.playbackRate = INTRO_SPEED;
     video.play().catch(() => {
       // Keep the EHT observation visible until the video can play.
     });
@@ -77,10 +101,30 @@ export default function AstroBlackHoleSequence({
     onBrandReveal();
   };
 
+  // Frame-accurate brand trigger: at INTRO_SPEED the ~4 Hz timeupdate event
+  // would land up to a quarter-second (0.75 s of footage) late.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || reducedMotion || !('requestVideoFrameCallback' in video)) return;
+    let handle = 0;
+    const tick = (_now: number, meta: VideoFrameCallbackMetadata) => {
+      if (meta.mediaTime >= CLIP.revealAt) {
+        signalBrandReveal();
+        return;
+      }
+      handle = video.requestVideoFrameCallback(tick);
+    };
+    handle = video.requestVideoFrameCallback(tick);
+    return () => video.cancelVideoFrameCallback(handle);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reducedMotion, videoSrc]);
+
   const handleCanPlay = () => {
     setVideoAvailable(true);
     setShowObservation(false);
-    videoRef.current?.play().catch(() => undefined);
+    const video = videoRef.current;
+    if (video && !revealSent.current) video.playbackRate = INTRO_SPEED;
+    video?.play().catch(() => undefined);
   };
 
   const handleTimeUpdate = (event: SyntheticEvent<HTMLVideoElement>) => {
@@ -102,7 +146,7 @@ export default function AstroBlackHoleSequence({
   };
 
   return (
-    <div className={`astro-scene astro-mode-${mode} ${videoAvailable ? 'has-footage' : ''}`} aria-label="NASA black-hole pullback simulation">
+    <div ref={sceneRef} className={`astro-scene astro-mode-${mode} ${videoAvailable ? 'has-footage' : ''}`} aria-label="NASA black-hole pullback simulation">
       <img
         className={'astro-observation ' + (showObservation ? 'is-visible' : 'is-receded')}
         src={EHT_OBSERVATION}

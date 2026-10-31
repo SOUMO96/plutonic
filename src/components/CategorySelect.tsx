@@ -4,6 +4,8 @@ type Category = 'him' | 'her';
 type Props = {
   onSelect: (category: Category) => void;
   isLeaving?: boolean;
+  /** Arriving straight from the welcome sequence: fade in on its compressed clock. */
+  introArrival?: boolean;
 };
 
 const collections = [
@@ -25,9 +27,9 @@ const collections = [
   },
 ];
 
-export default function CategorySelect({ onSelect, isLeaving = false }: Props) {
+export default function CategorySelect({ onSelect, isLeaving = false, introArrival = false }: Props) {
   return (
-    <section className={`category-screen ${isLeaving ? 'is-leaving' : ''}`} aria-label="Choose a collection">
+    <section className={`category-screen ${isLeaving ? 'is-leaving' : ''} ${introArrival ? 'is-intro-arrival' : ''}`} aria-label="Choose a collection">
       <div className="category-screen-heading">
         <span>PLUTONIC / THE COLLECTION</span>
         <span>CHOOSE YOUR UNIVERSE</span>
