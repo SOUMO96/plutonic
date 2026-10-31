@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "prepare:video": "node scripts/prepare-pullback.mjs"
+    "prepare:video": "node scripts/prepare-pullback.mjs",
+    "admin:hash": "node scripts/admin-hash.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

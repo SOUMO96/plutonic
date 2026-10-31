@@ -17,7 +17,7 @@ import { About, Support } from './pages/Info';
 // Heavier, rarely-first pages are split out of the initial bundle.
 const Checkout = lazy(() => import('./pages/Checkout'));
 const Confirmation = lazy(() => import('./pages/Checkout').then((m) => ({ default: m.Confirmation })));
-const Admin = lazy(() => import('./pages/Admin'));
+import { AdminGuard, AdminLogin } from './pages/AdminAccess';
 
 const DARK = new Set(['', 'men', 'about']);
 /** Elements that ease in as they scroll into view. */
@@ -90,7 +90,8 @@ export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }
     case 'returns': page = <Returns />; break;
     case 'about': page = <About />; break;
     case 'support': page = <Support />; break;
-    case 'admin': page = <Admin />; break;
+    // Default deny: only /admin/login is public; every other /admin/* path goes through the server-verified guard.
+    case 'admin': page = route.seg[1] === 'login' && route.seg.length === 2 ? <AdminLogin reason={route.query.get('reason')} /> : <AdminGuard />; break;
     default: page = <Home />;
   }
 

@@ -107,7 +107,7 @@ export function Returns() {
       <div className="ret-grid">
         <form className="stack-24" onSubmit={(e) => { e.preventDefault(); if (!o || !item) return; createReturn({ orderId: o.id, productName: item.name, variant: `${item.colourName} · ${item.size}`, kind, reason, note }); setDone(true); }}>
           <section><h2 className="h3">Order</h2>
-            {delivered.length === 0 && <p className="muted">No delivered orders yet. In the admin dashboard, advance an order to “Delivered” to try this flow. Sample order PL-10230 is already delivered.</p>}
+            {delivered.length === 0 && <p className="muted">No delivered orders yet. Sample order PL-10230 is already delivered, so you can try the returns flow with it.</p>}
             {delivered.map((x) => <label key={x.id} className={'opt-row' + (eligible(x) ? '' : ' off')}><input type="radio" name="o" disabled={!eligible(x)} checked={orderId === x.id} onChange={() => { setOrderId(x.id); setIdx(0); setDone(false); }} /><span><b>#{x.id}</b><small>Delivered {new Date(x.history[4] ?? x.createdAt).toLocaleDateString('en-IN')} · {x.items.length} item{x.items.length > 1 ? 's' : ''}</small></span><span className="muted small">{eligible(x) ? 'Eligible' : 'Window closed'}</span></label>)}</section>
           {o && <>
             <section><h2 className="h3">Item</h2>{o.items.map((i, n) => { const p = product(i.productId); return <label key={n} className="opt-row"><input type="radio" name="i" checked={idx === n} onChange={() => setIdx(n)} /><span><b>{i.name}</b><small>{i.colourName} · {i.size} · {inr(i.price)}</small></span>{p && <span className="ret-thumb"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span>}</label>; })}</section>

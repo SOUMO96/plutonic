@@ -35,7 +35,7 @@ The M87* frame is an observational reconstruction. The moving footage is a NASA 
 
 ## Storefront
 
-After the cinematic intro (first visit only) the site opens on the homepage. It is a hash-routed storefront (`src/site/`) built from the approved Claude Design canvas ("PLUTONIC — Premium Activewear E-commerce"). Routes: `#/` home, `#/men`, `#/women`, `#/shop` (listing, filters, sort, search), `#/product/:id`, `#/cart`, `#/checkout`, `#/order/:id`, `#/account`, `#/tracking/:id`, `#/wishlist`, `#/returns`, `#/admin`, `#/about`, `#/support`. `#/shop` accepts `g` (men/women), `cat`, `size`, `colour`, `fabric`, `price`, `q`, `new=1` and `sort`; the URL is the single source of truth, so filters survive refresh and Back. A shared link such as `https://…/#/product/m2`, skips the intro; every fresh load of the site (including `/#/`) plays it, and the footer has a "Replay the welcome film" link.
+After the cinematic intro (first visit only) the site opens on the homepage. It is a hash-routed storefront (`src/site/`) built from the approved Claude Design canvas ("PLUTONIC — Premium Activewear E-commerce"). Routes: `#/` home, `#/men`, `#/women`, `#/shop` (listing, filters, sort, search), `#/product/:id`, `#/cart`, `#/checkout`, `#/order/:id`, `#/account`, `#/tracking/:id`, `#/wishlist`, `#/returns`, `#/about`, `#/support`. `#/shop` accepts `g` (men/women), `cat`, `size`, `colour`, `fabric`, `price`, `q`, `new=1` and `sort`; the URL is the single source of truth, so filters survive refresh and Back. A shared link such as `https://…/#/product/m2`, skips the intro; every fresh load of the site (including `/#/`) plays it, and the footer has a "Replay the welcome film" link.
 
 - `src/site/catalog.ts` is the single product dataset (16 demonstration products, sizes, colours, per-size stock, prices in ₹). Every page reads products through `useStore()`.
 - `src/site/store.tsx` holds cart, wishlist, coupons, orders, returns, reviews, account and admin edits in `localStorage` (key `plutonic-demo-store-v1`).
@@ -45,3 +45,24 @@ After the cinematic intro (first visit only) the site opens on the homepage. It 
 ### What is real and what is simulated
 
 This is a front-end implementation. There is **no backend**: sign-in (mobile OTP code `123456`, any email and password), payment, order processing, delivery tracking steps and the admin dashboard are simulated in the browser, and the admin has no authentication. Stock decrements when an order is placed and admin edits (products, stock, coupons, returns, reviews, order status) show up on the storefront immediately, but only in the same browser. Replace `store.tsx` with calls to a real API (auth, inventory, payments, orders) to go live. Legal and policy text, the founding story and support contact details are marked placeholders awaiting your content.
+
+
+## Administrator access (server-verified)
+
+A customer account is never an administrator. The dashboard at `#/admin` is reachable only with a signed, HttpOnly session cookie issued by a Vercel serverless function after a password check on the server. Nothing in localStorage, the URL, or the customer login can grant it, and the dashboard code is not downloaded until the server confirms the session. Default is deny: a missing or failing check, unreachable API, or missing configuration all show the sign-in page.
+
+- Sign in at **`/#/admin/login`** (not linked from the customer site).
+- API (`api/admin/`): `POST /api/admin/login`, `GET /api/admin/session`, `POST /api/admin/logout`. Every future admin endpoint must start with `const cfg = requireAdmin(req, res); if (!cfg) return;` (`api/_lib/adminAuth.ts`).
+- Password: scrypt hash, constant-time comparison, same work done for a wrong email. Session: HMAC-SHA256 signed token, 8 h absolute expiry, `HttpOnly; SameSite=Strict; Path=/api/admin` (+ `Secure` on HTTPS), cleared on sign-out. Login/logout reject cross-origin and non-JSON requests; login is throttled (8 attempts / 15 min per IP, best effort per warm instance).
+
+### Configure (outside the source code)
+
+1. `npm run admin:hash` — type a password (12+ chars) into your own terminal; it prints three values.
+2. Vercel → Project → Settings → Environment Variables (Production/Preview): `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `ADMIN_SESSION_SECRET`. Never prefix with `VITE_`; never commit them. Redeploy after adding.
+3. Locally, put the same three in `.env.local` (git-ignored); `npm run dev` serves `/api/admin/*` through a dev-only middleware (`vite.config.ts`).
+4. To sign every admin out at once, change `ADMIN_SESSION_SECRET`. To change the password, regenerate the hash.
+
+### Limitations
+
+- The dashboard's *data* (products, stock, orders, coupons, edits) still lives in each visitor's browser `localStorage`; it is demonstration data, not centrally secured. Server-side protection covers access to the interface, not that data. A real store needs a database behind admin endpoints that use `requireAdmin`.
+- One administrator account. The login throttle is in-memory per serverless instance; use Vercel Firewall/rate limiting for stronger protection. Sign-out clears the cookie but a copied token stays valid until it expires (max 8 h) or the secret is rotated.

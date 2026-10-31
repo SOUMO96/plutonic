@@ -101,3 +101,19 @@
 .auth-note { font-size: 12px; }
 .guide summary { cursor: pointer; list-style: none; } .guide summary::-webkit-details-marker { display: none; }
 .guide-list { display: flex; flex-direction: column; gap: 10px; padding-left: 20px; list-style: decimal; font: 400 14px/1.7 Inter, sans-serif; } .guide-list b { font-weight: 600; }
+
+/* Administrator sign-in + verification screens */
+.alogin { min-height: 100vh; display: grid; place-items: center; background: #090909; color: #F2F0EB; padding: 24px 16px; }
+.alogin-card { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 18px; align-items: stretch; }
+.alogin-card > img { align-self: flex-start; width: auto; }
+.alogin-card .h2 { margin: 0; color: #F2F0EB; }
+.alogin-f { display: flex; flex-direction: column; gap: 8px; }
+.alogin-f input { height: 48px; background: transparent; border: 1px solid rgba(242,240,235,.3); color: #F2F0EB; padding: 0 14px; font: 400 15px Inter, sans-serif; width: 100%; box-sizing: border-box; }
+.alogin-f input:focus-visible { outline: 2px solid #F2F0EB; outline-offset: 2px; }
+.alogin-f input[aria-invalid='true'] { border-color: #E5867C; }
+.alogin-pw { position: relative; display: block; } .alogin-pw input { padding-right: 48px; }
+.alogin-pw button { position: absolute; right: 0; top: 0; height: 48px; width: 48px; background: none; border: 0; color: #B8B2A7; cursor: pointer; display: grid; place-items: center; }
+.alogin-err { color: #F0A59C; font-size: 13px; margin: 0; }
+.alogin-note { margin: 0; padding: 12px 14px; border: 1px solid rgba(242,240,235,.3); font-size: 13px; }
+.alogin .btn { height: 48px; } .alogin .btn:disabled { opacity: .6; cursor: progress; }
+.admin-signout { background: none; border: 0; color: inherit; cursor: pointer; text-align: left; padding: 0; }

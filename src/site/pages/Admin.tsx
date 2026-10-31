@@ -3,6 +3,7 @@ import { CATEGORIES, COLOURS, inr, totalStock, type Gender, type Product } from 
 import { Link } from '../router';
 import { ORDER_STEPS, useStore, type Coupon } from '../store';
 import { LOGO, Photo } from '../ui';
+import { adminSignOut } from './AdminAccess';
 
 const SECTIONS = ['Overview', 'Orders', 'Products', 'Inventory', 'Categories', 'Customers', 'Coupons', 'Banners', 'Returns', 'Reviews', 'Analytics'] as const;
 type Section = (typeof SECTIONS)[number];
@@ -114,9 +115,10 @@ export default function Admin() {
         <Link to="/" className="admin-brand"><img src={LOGO} alt="PLUTONIC" height={40} /><span className="lbl">Admin</span></Link>
         <nav>{SECTIONS.map((x) => <button key={x} type="button" aria-current={sec === x ? 'page' : undefined} onClick={() => setSec(x)}>{x}{x === 'Returns' && pendingReturns > 0 && <i>{pendingReturns}</i>}{x === 'Reviews' && pendingReviews > 0 && <i>{pendingReviews}</i>}</button>)}</nav>
         <Link to="/" className="lbl ulink small">← Back to store</Link>
+        <button type="button" className="lbl ulink small admin-signout" onClick={() => { void adminSignOut(); }}>Sign out</button>
       </aside>
       <main className="admin-main">
-        <div className="admin-top"><div><h1 className="h2">{sec}</h1><span className="muted small">Demonstration dashboard. Data is stored in this browser; there is no sign-in on this preview.</span></div>{sec === 'Products' && <button className="btn btn--dark" type="button" onClick={() => setEdit(blank('men'))}>Add product</button>}</div>
+        <div className="admin-top"><div><h1 className="h2">{sec}</h1><span className="muted small">Access is verified by the server. Catalogue, orders and edits are demonstration data stored in this browser only.</span></div>{sec === 'Products' && <button className="btn btn--dark" type="button" onClick={() => setEdit(blank('men'))}>Add product</button>}</div>
 
         {sec === 'Overview' && <>
           <details className="panel guide" open>
@@ -128,7 +130,7 @@ export default function Admin() {
               <li><b>Coupons</b> · create a code, then try it in the bag. Disable a code at any time.</li>
               <li><b>Returns and Reviews</b> · approve or reject customer requests; publish or hide reviews.</li>
             </ol>
-            <p className="muted small">This is a demonstration: there is no login, and everything is stored in this browser only, so changes are not shared with other visitors or devices.</p>
+            <p className="muted small">Signing in is verified by the server. The dashboard data itself is a demonstration: everything is stored in this browser only, so changes are not shared with other visitors or devices.</p>
           </details>
           <div className="kpis"><div><span className="lbl muted">Revenue</span><b>{inr(revenue)}</b></div><div><span className="lbl muted">Orders</span><b>{s.orders.length}</b></div><div><span className="lbl muted">Units sold</span><b>{units}</b></div><div><span className="lbl muted">Avg. order value</span><b>{inr(s.orders.length ? revenue / s.orders.length : 0)}</b></div><div><span className="lbl muted">Open returns</span><b>{pendingReturns}</b></div></div>
           <div className="cols"><section className="panel"><h2 className="h3">Revenue by collection</h2><Bars data={byGender} unit="₹ " /></section><section className="panel"><h2 className="h3">Inventory by colour · units</h2><Bars data={byColour} /></section></div>
