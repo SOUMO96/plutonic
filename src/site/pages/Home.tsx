@@ -2,20 +2,22 @@ import { useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { Link } from '../router';
 import { useStore } from '../store';
+import { GarmentArt, type Garment } from '../garments';
 import { ProductCard } from '../ui';
 
-const CATEGORY_TILES = [
-  { label: 'T-shirts', cat: 'T-shirts', g: 'men', tone: '#DCD7CE', cap: 'Detail · collar' },
-  { label: 'Leggings', cat: 'Leggings', g: 'women', tone: '#292929', cap: 'Detail · waistband' },
-  { label: 'Sports bras', cat: 'Sports bras', g: 'women', tone: '#4A4844', cap: 'Detail · strap' },
-  { label: 'Shorts', cat: 'Gym shorts', g: '', tone: '#B8B2A7', cap: 'Detail · hem' },
-  { label: 'Joggers', cat: 'Joggers', g: 'men', tone: '#6B675F', cap: 'Detail · cuff' },
-  { label: 'Hoodies & layers', cat: 'Hoodies', g: 'men', tone: '#1C1C1B', cap: 'Detail · hood' },
+type Art = { kind: Garment; colour: string; bg: string; view?: number };
+const CATEGORY_TILES: { label: string; cat: string; g: string; cap: string; art: Art }[] = [
+  { label: 'T-shirts', cat: 'T-shirts', g: 'men', cap: 'Detail · collar', art: { kind: 'tee', colour: '#1C1C1B', bg: '#CFCAC0', view: 2 } },
+  { label: 'Leggings', cat: 'Leggings', g: 'women', cap: 'Detail · waistband', art: { kind: 'legging', colour: '#B8B2A7', bg: '#292929' } },
+  { label: 'Sports bras', cat: 'Sports bras', g: 'women', cap: 'Detail · strap', art: { kind: 'bra', colour: '#DCD7CE', bg: '#4A4844' } },
+  { label: 'Shorts', cat: 'Gym shorts', g: '', cap: 'Detail · hem', art: { kind: 'shorts', colour: '#1C1C1B', bg: '#B8B2A7' } },
+  { label: 'Joggers', cat: 'Joggers', g: 'men', cap: 'Detail · cuff', art: { kind: 'jogger', colour: '#DCD7CE', bg: '#4A4844' } },
+  { label: 'Hoodies & layers', cat: 'Hoodies', g: 'men', cap: 'Detail · hood', art: { kind: 'hoodie', colour: '#B8B2A7', bg: '#1C1C1B' } },
 ];
-const EDITS = [
-  { title: 'Obsidian Core', blurb: 'The black essentials. Nine pieces, endlessly combinable.', to: '/shop?colour=onyx', tone: '#292929', cap: 'Concrete hall · mixed cast' },
-  { title: 'Sculpt', blurb: 'Second-skin knits with a matte, held finish.', to: '/shop?g=women&fabric=Sculpt', tone: '#4A4844', cap: 'Limestone terrace · women' },
-  { title: 'After Hours', blurb: 'Brushed layers for the walk home.', to: '/shop?g=men&cat=Hoodies', tone: '#1C1C1B', cap: 'Night street · men' },
+const EDITS: { title: string; blurb: string; to: string; cap: string; art: Art }[] = [
+  { title: 'Obsidian Core', blurb: 'The black essentials. Nine pieces, endlessly combinable.', to: '/shop?colour=onyx', cap: 'Illustration · Obsidian Core', art: { kind: 'hoodie', colour: '#1C1C1B', bg: '#CFCAC0' } },
+  { title: 'Sculpt', blurb: 'Second-skin knits with a matte, held finish.', to: '/shop?g=women&fabric=Sculpt', cap: 'Illustration · Sculpt', art: { kind: 'set', colour: '#B8B2A7', bg: '#292929' } },
+  { title: 'After Hours', blurb: 'Brushed layers for the walk home.', to: '/shop?g=men&cat=Hoodies', cap: 'Illustration · After Hours', art: { kind: 'jacket', colour: '#DCD7CE', bg: '#1C1C1B' } },
 ];
 const VALUES = [
   ['Restraint', 'No logos for the sake of logos. Detail you notice on the second wear.'],
@@ -76,7 +78,7 @@ export default function Home() {
           <div className="grid grid--6">
             {CATEGORY_TILES.map((c) => (
               <Link key={c.label} to={`/shop?${c.g ? 'g=' + c.g + '&' : ''}cat=${encodeURIComponent(c.cat)}`} className="tile">
-                <div className="ph" style={{ aspectRatio: '3 / 4', background: c.tone }}><span className="ph-cap" style={{ color: '#85837E' }}>{c.cap}</span></div>
+                <div className="ph" style={{ aspectRatio: '3 / 4', background: c.art.bg }}><GarmentArt kind={c.art.kind} colour={c.art.colour} view={c.art.view ?? 0} /><span className="ph-cap" style={{ color: '#85837E' }}>{c.cap}</span></div>
                 <span className="lbl">{c.label}</span>
               </Link>
             ))}
@@ -90,7 +92,7 @@ export default function Home() {
           <div className="grid grid--3">
             {EDITS.map((e) => (
               <Link key={e.title} to={e.to} className="edit">
-                <div className="ph" style={{ aspectRatio: '4 / 5', background: e.tone }}><span className="ph-cap" style={{ color: '#85837E' }}>{e.cap}</span></div>
+                <div className="ph" style={{ aspectRatio: '4 / 5', background: e.art.bg }}><GarmentArt kind={e.art.kind} colour={e.art.colour} /><span className="ph-cap" style={{ color: '#85837E' }}>{e.cap}</span></div>
                 <span className="lbl muted">Collection</span><span className="h3">{e.title}</span><span className="body muted">{e.blurb}</span>
               </Link>
             ))}

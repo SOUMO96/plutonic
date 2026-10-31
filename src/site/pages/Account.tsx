@@ -23,8 +23,9 @@ function PasswordField({ label, value, onChange, error, autoComplete, id }: { la
 }
 const Err = ({ m }: { m?: string }) => (m ? <span className="err small" role="alert">{m}</span> : null);
 
-function SignedOut() {
+function SignedOut({ route }: { route: Route }) {
   const { signIn, say } = useStore();
+  const [mode, setMode] = useState<'login' | 'signup'>(route.query.get('mode') === 'signup' ? 'signup' : 'login');
   const [view, setView] = useState<'email' | 'otp' | 'forgot'>('email');
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
@@ -38,13 +39,19 @@ function SignedOut() {
   const [errs, setErrs] = useState<Record<string, string>>({});
   const finish = (u: { firstName: string; lastName: string; email: string; mobile: string; fit?: string }) => { signIn(u); say('Signed in (demonstration)'); go('/account'); };
   const nameFrom = (e: string) => { const n = e.split('@')[0].replace(/[._-]+/g, ' ').trim(); return n ? n[0].toUpperCase() + n.slice(1) : 'Guest'; };
+  const switchMode = (m: 'login' | 'signup') => { setMode(m); setView('email'); setErrs({}); };
 
   return (
     <div className="pl-wrap auth">
-      <p className="note auth-note span-all" role="note"><b>Demonstration sign-in.</b> There is no real account system behind this page: your email and password are not checked, sent or stored. They are discarded as soon as you continue.</p>
-      <section className="auth-card" aria-labelledby="signin-h">
-        <h1 id="signin-h" className="h2">{view === 'forgot' ? 'Reset your password' : 'Sign in'}</h1>
-        {view === 'email' && (
+      <section className="auth-card" aria-labelledby="auth-h">
+        <div className="seg seg--full" role="tablist" aria-label="Account">
+          <button type="button" role="tab" aria-selected={mode === 'login'} onClick={() => switchMode('login')}>Log in</button>
+          <button type="button" role="tab" aria-selected={mode === 'signup'} onClick={() => switchMode('signup')}>Sign up</button>
+        </div>
+        <h1 id="auth-h" className="h2">{mode === 'signup' ? 'Create your account' : view === 'forgot' ? 'Reset your password' : 'Log in'}</h1>
+        <p className="note auth-note" role="note"><b>Demonstration only.</b> There is no real account system behind this page: email and password are not checked, sent or stored, and are discarded as soon as you continue.</p>
+
+        {mode === 'login' && view === 'email' && (
           <form key="email" className="tab-enter" noValidate onSubmit={(e) => {
             e.preventDefault();
             const x: Record<string, string> = {};
@@ -56,11 +63,11 @@ function SignedOut() {
             <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" aria-invalid={errs.email ? true : undefined} /><Err m={errs.email} /></label>
             <PasswordField id="pw" label="Password" value={pw} onChange={setPw} error={errs.pw} autoComplete="current-password" />
             <div className="row-between"><button type="button" className="linkbtn" onClick={() => { setView('forgot'); setErrs({}); setReset(email); }}>Forgot password?</button></div>
-            <button className="btn btn--dark btn--block" type="submit">Sign in</button>
+            <button className="btn btn--dark btn--block" type="submit">Log in</button>
             <button type="button" className="linkbtn center" onClick={() => { setView('otp'); setErrs({}); }}>Use a mobile code instead</button>
           </form>
         )}
-        {view === 'otp' && (
+        {mode === 'login' && view === 'otp' && (
           <form key="otp" className="tab-enter" noValidate onSubmit={(e) => {
             e.preventDefault();
             if (!sent) { if (!/^[6-9]\d{9}$/.test(mobile)) { setErrs({ mobile: 'Enter a 10-digit mobile number.' }); return; } setErrs({}); setSent(true); say('Demo code ready. Use 123456.'); return; }
@@ -69,49 +76,48 @@ function SignedOut() {
           }}>
             <label>Mobile number<input inputMode="numeric" maxLength={10} value={mobile} onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))} aria-invalid={errs.mobile ? true : undefined} /><Err m={errs.mobile} /></label>
             {sent && <label>6-digit code<input inputMode="numeric" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} aria-invalid={errs.otp ? true : undefined} /><Err m={errs.otp} /></label>}
-            <button className="btn btn--dark btn--block" type="submit">{sent ? 'Verify and sign in' : 'Send code'}</button>
+            <button className="btn btn--dark btn--block" type="submit">{sent ? 'Verify and log in' : 'Send code'}</button>
             <small className="muted">No SMS is sent. Any valid mobile number works with the code 123456.</small>
             <button type="button" className="linkbtn center" onClick={() => { setView('email'); setErrs({}); }}>Back to email and password</button>
           </form>
         )}
-        {view === 'forgot' && (
+        {mode === 'login' && view === 'forgot' && (
           <form key="forgot" className="tab-enter" noValidate onSubmit={(e) => { e.preventDefault(); if (!EMAIL.test(reset)) { setErrs({ reset: 'Enter a valid email address.' }); return; } setErrs({}); setResetSent(true); }}>
             {resetSent ? <p className="note ok" role="status">If an account exists for <b>{reset}</b>, a reset link would be sent now. (Demonstration: no email is sent.)</p> : <>
               <p className="muted">Enter your email and we’ll send a link to choose a new password.</p>
               <label>Email<input type="email" value={reset} onChange={(e) => setReset(e.target.value)} autoComplete="email" aria-invalid={errs.reset ? true : undefined} /><Err m={errs.reset} /></label>
               <button className="btn btn--dark btn--block" type="submit">Send reset link</button></>}
-            <button type="button" className="linkbtn center" onClick={() => { setView('email'); setResetSent(false); setErrs({}); }}>Back to sign in</button>
+            <button type="button" className="linkbtn center" onClick={() => { setView('email'); setResetSent(false); setErrs({}); }}>Back to log in</button>
           </form>
         )}
-      </section>
 
-      <section className="auth-card" aria-labelledby="reg-h">
-        <h2 id="reg-h" className="h2">New to PLUTONIC?</h2>
-        <p className="muted">Create an account to track orders, save addresses, keep a wishlist and request exchanges in a few taps.</p>
-        <form noValidate onSubmit={(e) => {
-          e.preventDefault();
-          const x: Record<string, string> = {};
-          if (!reg.firstName.trim()) x.rf = 'Enter your first name.';
-          if (!EMAIL.test(reg.email)) x.re = 'Enter a valid email address.';
-          if (!/^[6-9]\d{9}$/.test(reg.mobile)) x.rm = 'Enter a 10-digit mobile number.';
-          if (reg.pw.length < 8 || !/[a-z]/i.test(reg.pw) || !/\d/.test(reg.pw)) x.rp = 'Use 8+ characters with a letter and a number.';
-          if (reg.pw2 !== reg.pw) x.rp2 = 'Passwords do not match.';
-          setErrs(x); if (Object.keys(x).length) return;
-          const { pw: _p, pw2: _p2, ...profile } = reg; void _p; void _p2;
-          setReg({ ...reg, pw: '', pw2: '' });
-          finish({ ...profile, fit });
-        }}>
-          <div className="fgrid">
-            <label>First name<input value={reg.firstName} onChange={(e) => setReg({ ...reg, firstName: e.target.value })} autoComplete="given-name" aria-invalid={errs.rf ? true : undefined} /><Err m={errs.rf} /></label>
-            <label>Last name<input value={reg.lastName} onChange={(e) => setReg({ ...reg, lastName: e.target.value })} autoComplete="family-name" /></label>
-            <label>Email<input type="email" value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} autoComplete="email" aria-invalid={errs.re ? true : undefined} /><Err m={errs.re} /></label>
-            <label>Mobile number<input inputMode="numeric" maxLength={10} value={reg.mobile} onChange={(e) => setReg({ ...reg, mobile: e.target.value.replace(/\D/g, '') })} autoComplete="tel-national" aria-invalid={errs.rm ? true : undefined} /><Err m={errs.rm} /></label>
-            <PasswordField id="rpw" label="Password" value={reg.pw} onChange={(v) => setReg({ ...reg, pw: v })} error={errs.rp} autoComplete="new-password" />
-            <PasswordField id="rpw2" label="Confirm password" value={reg.pw2} onChange={(v) => setReg({ ...reg, pw2: v })} error={errs.rp2} autoComplete="new-password" />
-          </div>
-          <fieldset className="inline"><legend className="lbl">Shop for (optional)</legend>{['Women', 'Men', 'Both'].map((x) => <label key={x} className="check"><input type="radio" name="shopfor" checked={fit === x} onChange={() => setFit(x)} />{x}</label>)}</fieldset>
-          <button className="btn btn--dark btn--block" type="submit">Create account</button>
-        </form>
+        {mode === 'signup' && (
+          <form key="signup" className="tab-enter" noValidate onSubmit={(e) => {
+            e.preventDefault();
+            const x: Record<string, string> = {};
+            if (!reg.firstName.trim()) x.rf = 'Enter your first name.';
+            if (!EMAIL.test(reg.email)) x.re = 'Enter a valid email address.';
+            if (!/^[6-9]\d{9}$/.test(reg.mobile)) x.rm = 'Enter a 10-digit mobile number.';
+            if (reg.pw.length < 8 || !/[a-z]/i.test(reg.pw) || !/\d/.test(reg.pw)) x.rp = 'Use 8+ characters with a letter and a number.';
+            if (reg.pw2 !== reg.pw) x.rp2 = 'Passwords do not match.';
+            setErrs(x); if (Object.keys(x).length) return;
+            const { pw: _p, pw2: _p2, ...profile } = reg; void _p; void _p2;
+            setReg({ ...reg, pw: '', pw2: '' });
+            finish({ ...profile, fit });
+          }}>
+            <div className="fgrid">
+              <label>First name<input value={reg.firstName} onChange={(e) => setReg({ ...reg, firstName: e.target.value })} autoComplete="given-name" aria-invalid={errs.rf ? true : undefined} /><Err m={errs.rf} /></label>
+              <label>Last name<input value={reg.lastName} onChange={(e) => setReg({ ...reg, lastName: e.target.value })} autoComplete="family-name" /></label>
+              <label>Email<input type="email" value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} autoComplete="email" aria-invalid={errs.re ? true : undefined} /><Err m={errs.re} /></label>
+              <label>Mobile number<input inputMode="numeric" maxLength={10} value={reg.mobile} onChange={(e) => setReg({ ...reg, mobile: e.target.value.replace(/\D/g, '') })} autoComplete="tel-national" aria-invalid={errs.rm ? true : undefined} /><Err m={errs.rm} /></label>
+              <PasswordField id="rpw" label="Password" value={reg.pw} onChange={(v) => setReg({ ...reg, pw: v })} error={errs.rp} autoComplete="new-password" />
+              <PasswordField id="rpw2" label="Confirm password" value={reg.pw2} onChange={(v) => setReg({ ...reg, pw2: v })} error={errs.rp2} autoComplete="new-password" />
+            </div>
+            <fieldset className="inline"><legend className="lbl">Shop for (optional)</legend>{['Women', 'Men', 'Both'].map((x) => <label key={x} className="check"><input type="radio" name="shopfor" checked={fit === x} onChange={() => setFit(x)} />{x}</label>)}</fieldset>
+            <button className="btn btn--dark btn--block" type="submit">Create account</button>
+            <button type="button" className="linkbtn center" onClick={() => switchMode('login')}>Already have an account? Log in</button>
+          </form>
+        )}
       </section>
     </div>
   );
@@ -206,5 +212,5 @@ function Dashboard({ route }: { route: Route }) {
 
 export default function Account({ route }: { route: Route }) {
   const { user } = useStore();
-  return user ? <Dashboard route={route} /> : <SignedOut />;
+  return user ? <Dashboard route={route} /> : <SignedOut route={route} />;
 }

@@ -87,3 +87,17 @@
   .drawer { transform: none; } .drawer-nav a { opacity: 1; transform: none; }
   .check-draw circle, .check-draw path { stroke-dashoffset: 0; animation: none; }
 }
+
+/* Illustrated garments */
+.ph .garment { position: absolute; inset: 7% 8% 11%; width: 84%; height: 82%; display: block; transition: transform .9s cubic-bezier(.16,1,.3,1); }
+.card:hover .ph .garment { transform: scale(1.04) translateY(-2px); }
+.ph .garment path { transition: fill .35s ease; }
+.result-img .ph-cap, .ret-thumb .ph-cap, .thumb .ph-cap, .co-items .ph-cap, .mini .ph-cap, .gal-thumbs .ph-cap { display: none; }
+
+/* Account: one centred card with Log in / Sign up tabs */
+.auth { display: block; max-width: 640px; padding-top: 48px; }
+.auth-card { gap: 20px; }
+.seg--full { display: flex; width: 100%; } .seg--full button { flex: 1; }
+.auth-note { font-size: 12px; }
+.guide summary { cursor: pointer; list-style: none; } .guide summary::-webkit-details-marker { display: none; }
+.guide-list { display: flex; flex-direction: column; gap: 10px; padding-left: 20px; list-style: decimal; font: 400 14px/1.7 Inter, sans-serif; } .guide-list b { font-weight: 600; }

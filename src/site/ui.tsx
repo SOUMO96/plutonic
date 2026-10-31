@@ -2,30 +2,42 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Heart, Menu, Search, ShoppingBag, Star, User, X } from 'lucide-react';
 import { discountPercent, FREE_SHIPPING_ABOVE, inr, RETURN_WINDOW_DAYS, sizeStock, totalStock, type Product } from './catalog';
 import { go, Link, useRoute } from './router';
+import { GarmentArt, garmentFor } from './garments';
 import { useStore } from './store';
 
 export const LOGO = '/plutonic-logo-transparent.svg';
 
-function isDark(hex: string) {
+function lum(hex: string) {
   const n = parseInt(hex.slice(1), 16);
-  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) < 140;
+  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
 }
 
-/** Product photograph, or the approved design's tonal placeholder when none exists yet. */
-export function Photo({ p, index = 0, ratio = '4 / 5', priority = false, className = '', children }: {
-  p: Product; index?: number; ratio?: string; priority?: boolean; className?: string; children?: ReactNode;
+const VIEW_LABEL = ['Front', 'Back', 'Detail · upper', 'Detail · lower'];
+
+/**
+ * Product photograph when one exists for the selected colour; otherwise an original garment
+ * illustration drawn in that colour (clearly labelled), never an unrelated photograph.
+ */
+export function Photo({ p, index = 0, ratio = '4 / 5', priority = false, className = '', colourId, children }: {
+  p: Product; index?: number; ratio?: string; priority?: boolean; className?: string; colourId?: string; children?: ReactNode;
 }) {
   const [failed, setFailed] = useState(false);
+  const colour = p.colours.find((c) => c.id === colourId) ?? p.colours[0];
   const src = p.images[index] ?? (index > 0 ? undefined : p.images[0]);
-  const tone = p.tone;
-  const showImg = src && !failed;
+  const photoMatches = !p.imageColour || p.imageColour === colour.id;
+  const showImg = !!src && !failed && photoMatches;
+  const l = lum(colour.hex);
+  const bg = l < 0.35 ? '#CFCAC0' : '#2C2C2B';
   return (
-    <div className={'ph ' + className} style={{ aspectRatio: ratio, background: tone }}>
+    <div className={'ph ' + className} style={{ aspectRatio: ratio, background: showImg ? p.tone : bg }}>
       {showImg ? (
         <img src={src} alt={`${p.name}, ${p.shots[index] ?? 'product photograph'}`} loading={priority ? 'eager' : 'lazy'}
           fetchPriority={priority ? 'high' : 'auto'} decoding="async" onError={() => setFailed(true)} />
       ) : (
-        <span className="ph-cap" style={{ color: isDark(tone) ? '#85837E' : '#2B2A28' }}>{p.shots[index] ?? 'Packshot'}</span>
+        <>
+          <GarmentArt kind={garmentFor(p.category)} colour={colour.hex} view={index} />
+          <span className="ph-cap" style={{ color: l < 0.35 ? '#5E5C58' : '#85837E' }}>Illustration · {(VIEW_LABEL[index] ?? 'View').toLowerCase()} · {colour.name}</span>
+        </>
       )}
       {children}
     </div>
@@ -70,7 +82,7 @@ export function ProductCard({ p, ratio = '4 / 5', priority = false, showQuick = 
   return (
     <article className="card">
       <Link to={`/product/${p.id}`} className="card-link" aria-label={`${p.name}, ${inr(p.price)}`}>
-        <Photo p={p} ratio={ratio} priority={priority}>
+        <Photo p={p} ratio={ratio} priority={priority} colourId={colourId}>
           {out ? <span className="badge badge--out">Sold out</span> : p.isNew ? <span className="badge">New</span> : tag ? <span className="badge">{tag}</span> : null}
         </Photo>
       </Link>
@@ -208,7 +220,7 @@ export function Footer({ onReplayIntro }: { onReplayIntro?: () => void }) {
         <div className="ftr-cols">
           <div><span className="lbl">Shop</span><Link to="/men">Men</Link><Link to="/women">Women</Link><Link to="/shop?new=1">New arrivals</Link><Link to="/shop">Shop all</Link><Link to="/wishlist">Wishlist</Link></div>
           <div><span className="lbl">Help</span><Link to="/tracking">Track an order</Link><Link to="/returns">Returns &amp; exchanges</Link><Link to="/support">Shipping</Link><Link to="/support">Contact us</Link></div>
-          <div><span className="lbl">PLUTONIC</span><Link to="/about">Our story</Link><Link to="/support">Size guide</Link><Link to="/support">Privacy</Link><Link to="/support">Terms</Link>{onReplayIntro && <button type="button" className="linkbtn" onClick={onReplayIntro}>Replay the welcome film</button>}</div>
+          <div><span className="lbl">PLUTONIC</span><Link to="/about">Our story</Link><Link to="/support">Size guide</Link><Link to="/support">Privacy</Link><Link to="/support">Terms</Link><Link to="/admin">Admin dashboard (demo)</Link>{onReplayIntro && <button type="button" className="linkbtn" onClick={onReplayIntro}>Replay the welcome film</button>}</div>
         </div>
         <div className="ftr-base"><span>© PLUTONIC. Beyond the ordinary.</span><span>India · ₹ INR · English</span></div>
         <p className="ftr-demo">Demonstration storefront: products, prices and stock are sample data, and payments and orders are simulated.</p>

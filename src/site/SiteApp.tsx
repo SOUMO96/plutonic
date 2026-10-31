@@ -22,25 +22,34 @@ const DARK = new Set(['', 'men', 'about']);
 /** Elements that ease in as they scroll into view. */
 const REVEAL = '.card, .tile, .edit, .split-tile, .sec-head, .support-card, .values > div, .fabrics > *, .layers > *, .news, .philosophy > *, .about-grid > *, .help-tile, .rev, .line, .panel, .co-form section, .timeline li';
 
-/** Adds `is-in` to reveal targets once they approach the viewport. Content stays visible without JS or with reduced motion. */
+/**
+ * Adds `is-in` to reveal targets once they approach the viewport. Content stays visible without JS or with
+ * reduced motion, and a timer reveals anything near the viewport in case the observer never reports it.
+ */
 function useScrollReveal(path: string) {
   useEffect(() => {
     if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const io = new IntersectionObserver((entries) => entries.forEach((e) => {
-      if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); }
-    }), { rootMargin: '0px 0px -6% 0px', threshold: 0.04 });
-    const scan = () => document.querySelectorAll<HTMLElement>('.pl-main ' + REVEAL.split(', ').join(', .pl-main ')).forEach((el) => {
-      if (el.dataset.rv) return;
-      el.dataset.rv = '1'; el.classList.add('rv');
+    const selector = REVEAL.split(', ').map((s) => '.pl-main ' + s).join(', ');
+    const seen = new WeakSet<Element>();
+    const reveal = (el: Element) => { el.classList.add('is-in'); io.unobserve(el); };
+    const io = new IntersectionObserver((entries) => entries.forEach((e) => { if (e.isIntersecting) reveal(e.target); }), { rootMargin: '0px 0px -6% 0px', threshold: 0.04 });
+    const scan = () => document.querySelectorAll<HTMLElement>(selector).forEach((el) => {
+      if (seen.has(el)) return;
+      seen.add(el);
+      el.classList.add('rv');
       const siblings = el.parentElement ? [...el.parentElement.children].filter((c) => c.matches(REVEAL)) : [];
       el.style.setProperty('--i', String(Math.min(Math.max(siblings.indexOf(el), 0), 7)));
       io.observe(el);
     });
+    // Safety net: never leave content hidden that is already on (or just below) the screen.
+    const sweep = () => document.querySelectorAll('.pl-main .rv:not(.is-in)').forEach((el) => { if (el.getBoundingClientRect().top < window.innerHeight * 1.15) reveal(el); });
     scan();
     const mo = new MutationObserver(scan);
     const root = document.querySelector('.pl-main');
     if (root) mo.observe(root, { childList: true, subtree: true });
-    return () => { io.disconnect(); mo.disconnect(); };
+    const timer = window.setInterval(sweep, 900);
+    window.addEventListener('scroll', sweep, { passive: true });
+    return () => { io.disconnect(); mo.disconnect(); window.clearInterval(timer); window.removeEventListener('scroll', sweep); };
   }, [path]);
 }
 

@@ -66,7 +66,7 @@ export function Wishlist() {
             const sel = sizes[p!.id] ?? '';
             return (
               <article key={p!.id} className="card wish-card">
-                <Link to={`/product/${p!.id}`}><Photo p={p!} ratio="4 / 5">{sold && <span className="badge badge--out">Sold out</span>}</Photo></Link>
+                <Link to={`/product/${p!.id}`}><Photo p={p!} ratio="4 / 5" colourId={colour?.id}>{sold && <span className="badge badge--out">Sold out</span>}</Photo></Link>
                 <button type="button" className="wish on" aria-label={`Remove ${p!.name} from wishlist`} onClick={() => toggleWish(p!.id)}>×</button>
                 <Link to={`/product/${p!.id}`} className="card-meta"><span className="card-top"><span className="card-n">{p!.name}</span><b>{inr(p!.price)}</b></span></Link>
                 {sold ? <button type="button" className="btn btn--ghost btn--sm btn--block" disabled={notified.includes(p!.id)} onClick={() => notifyMe(p!.id)}>{notified.includes(p!.id) ? 'We’ll notify you' : 'Notify me'}</button> : (
@@ -110,7 +110,7 @@ export function Returns() {
             {delivered.length === 0 && <p className="muted">No delivered orders yet. In the admin dashboard, advance an order to “Delivered” to try this flow. Sample order PL-10230 is already delivered.</p>}
             {delivered.map((x) => <label key={x.id} className={'opt-row' + (eligible(x) ? '' : ' off')}><input type="radio" name="o" disabled={!eligible(x)} checked={orderId === x.id} onChange={() => { setOrderId(x.id); setIdx(0); setDone(false); }} /><span><b>#{x.id}</b><small>Delivered {new Date(x.history[4] ?? x.createdAt).toLocaleDateString('en-IN')} · {x.items.length} item{x.items.length > 1 ? 's' : ''}</small></span><span className="muted small">{eligible(x) ? 'Eligible' : 'Window closed'}</span></label>)}</section>
           {o && <>
-            <section><h2 className="h3">Item</h2>{o.items.map((i, n) => { const p = product(i.productId); return <label key={n} className="opt-row"><input type="radio" name="i" checked={idx === n} onChange={() => setIdx(n)} /><span><b>{i.name}</b><small>{i.colourName} · {i.size} · {inr(i.price)}</small></span>{p && <span className="ret-thumb"><Photo p={p} ratio="4 / 5" /></span>}</label>; })}</section>
+            <section><h2 className="h3">Item</h2>{o.items.map((i, n) => { const p = product(i.productId); return <label key={n} className="opt-row"><input type="radio" name="i" checked={idx === n} onChange={() => setIdx(n)} /><span><b>{i.name}</b><small>{i.colourName} · {i.size} · {inr(i.price)}</small></span>{p && <span className="ret-thumb"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span>}</label>; })}</section>
             <section><h2 className="h3">Return or exchange</h2>
               <label className="opt-row"><input type="radio" name="k" checked={kind === 'exchange'} onChange={() => setKind('exchange')} /><span><b>Exchange</b><small>Another size or colour, shipped at no cost</small></span></label>
               <label className="opt-row"><input type="radio" name="k" checked={kind === 'return'} onChange={() => setKind('return')} /><span><b>Return</b><small>Refund to original payment method</small></span></label>

@@ -79,16 +79,16 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
       <div className="pl-wrap"><Crumbs items={[{ label: 'Home', to: '/' }, { label: p.gender === 'men' ? 'Men' : 'Women', to: '/' + p.gender }, { label: p.category, to: `/shop?g=${p.gender}&cat=${encodeURIComponent(p.category)}` }, { label: p.name }]} /></div>
       <div className="pl-wrap pdp-grid">
         <div className="gal">
-          <div className="gal-thumbs" role="tablist" aria-label="Product views">{gallery.map((i) => <button key={i} type="button" role="tab" aria-selected={shot === i} className={shot === i ? 'on' : ''} onClick={() => { setShot(i); stripRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' }); }} aria-label={`View ${i + 1}: ${p.shots[i] ?? 'photograph'}`}><Photo p={p} index={i} ratio="4 / 5" /></button>)}</div>
+          <div className="gal-thumbs" role="tablist" aria-label="Product views">{gallery.map((i) => <button key={i} type="button" role="tab" aria-selected={shot === i} className={shot === i ? 'on' : ''} onClick={() => { setShot(i); stripRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' }); }} aria-label={`View ${i + 1}: ${p.shots[i] ?? 'photograph'}`}><Photo p={p} index={i} ratio="4 / 5" colourId={colourId} /></button>)}</div>
           <div className="gal-main">
             <div ref={stripRef} className="gal-strip" onScroll={(e) => { const el = e.currentTarget; setShot(Math.round(el.scrollLeft / el.clientWidth)); }}>
               {gallery.map((i) => (
                 <div key={i} className={'gal-slide' + (zoom && shot === i ? ' zoomed' : '')} onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setPos(`${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`); }} style={zoom && shot === i ? ({ ['--zoom-pos' as string]: pos } as React.CSSProperties) : undefined}>
-                  <Photo p={p} index={i} ratio="4 / 5" priority={i === 0} />
+                  <Photo p={p} index={i} ratio="4 / 5" priority={i === 0} colourId={colourId} />
                 </div>
               ))}
             </div>
-            <div className="gal-bar"><span className="lbl">{p.shots[shot] ?? 'Packshot'}</span><span className="lbl">{String(shot + 1).padStart(2, '0')} / {String(shots).padStart(2, '0')}</span>
+            <div className="gal-bar"><span className="lbl">{p.images[shot] && (!p.imageColour || p.imageColour === colourId) ? (p.shots[shot] ?? 'Photograph') : 'Illustrated preview · photography coming soon'}</span><span className="lbl">{String(shot + 1).padStart(2, '0')} / {String(shots).padStart(2, '0')}</span>
               <button type="button" className="lbl ulink gal-zoom" onClick={() => setZoom((z) => !z)} aria-pressed={zoom}><ZoomIn size={14} aria-hidden="true" /> {zoom ? 'Zoom out' : 'Zoom'}</button></div>
           </div>
         </div>

@@ -119,6 +119,17 @@ export default function Admin() {
         <div className="admin-top"><div><h1 className="h2">{sec}</h1><span className="muted small">Demonstration dashboard. Data is stored in this browser; there is no sign-in on this preview.</span></div>{sec === 'Products' && <button className="btn btn--dark" type="button" onClick={() => setEdit(blank('men'))}>Add product</button>}</div>
 
         {sec === 'Overview' && <>
+          <details className="panel guide" open>
+            <summary className="h3">How to use this dashboard</summary>
+            <ol className="guide-list">
+              <li><b>Orders</b> · place an order on the storefront, then open Orders and press “Mark packed”, “Mark shipped”… The customer sees each step on Track an order, and a Delivered order can be returned or exchanged.</li>
+              <li><b>Products</b> · “Add product” (name, collection, category, prices, colours, sizes, stock per colour and size, photos). It appears on the storefront straight away. “Edit” changes anything; “Hide” removes it from the shop without deleting it.</li>
+              <li><b>Inventory</b> · stock totals by size. Amber means fewer than 10 units. Change exact units in Products → Edit.</li>
+              <li><b>Coupons</b> · create a code, then try it in the bag. Disable a code at any time.</li>
+              <li><b>Returns and Reviews</b> · approve or reject customer requests; publish or hide reviews.</li>
+            </ol>
+            <p className="muted small">This is a demonstration: there is no login, and everything is stored in this browser only, so changes are not shared with other visitors or devices.</p>
+          </details>
           <div className="kpis"><div><span className="lbl muted">Revenue</span><b>{inr(revenue)}</b></div><div><span className="lbl muted">Orders</span><b>{s.orders.length}</b></div><div><span className="lbl muted">Units sold</span><b>{units}</b></div><div><span className="lbl muted">Avg. order value</span><b>{inr(s.orders.length ? revenue / s.orders.length : 0)}</b></div><div><span className="lbl muted">Open returns</span><b>{pendingReturns}</b></div></div>
           <div className="cols"><section className="panel"><h2 className="h3">Revenue by collection</h2><Bars data={byGender} unit="₹ " /></section><section className="panel"><h2 className="h3">Inventory by colour · units</h2><Bars data={byColour} /></section></div>
           <section className="panel"><h2 className="h3">Low stock (under 5 units)</h2>{low.length === 0 ? <p className="muted">Nothing running low.</p> : <table className="tbl"><tbody>{low.slice(0, 8).map(({ p, k, n }) => <tr key={p.id + k}><td>{p.name}</td><td>{k.replace(':', ' · ')}</td><td>{n} left</td></tr>)}</tbody></table>}</section>

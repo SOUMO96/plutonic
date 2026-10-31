@@ -103,7 +103,7 @@ export default function Checkout() {
 
         <aside className="summary co-sum" aria-label="Order summary">
           <span className="lbl muted">Order summary · {cart.reduce((n, l) => n + l.qty, 0)} items</span>
-          <ul className="co-items">{lines.map(({ l, p }) => <li key={l.key}><Photo p={p!} ratio="4 / 5" /><span><b>{p!.name}</b><small className="muted">{p!.colours.find((c) => c.id === l.colourId)?.name} · {l.size} · Qty {l.qty}</small></span><span>{inr(p!.price * l.qty)}</span></li>)}</ul>
+          <ul className="co-items">{lines.map(({ l, p }) => <li key={l.key}><Photo p={p!} ratio="4 / 5" colourId={l.colourId} /><span><b>{p!.name}</b><small className="muted">{p!.colours.find((c) => c.id === l.colourId)?.name} · {l.size} · Qty {l.qty}</small></span><span>{inr(p!.price * l.qty)}</span></li>)}</ul>
           <dl className="sum">
             <div><dt>Subtotal</dt><dd>{inr(pr.subtotal)}</dd></div>
             {pr.discount > 0 && <div><dt>Promo {coupon?.code}</dt><dd className="ok">− {inr(pr.discount)}</dd></div>}

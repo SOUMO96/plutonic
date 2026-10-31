@@ -32,7 +32,7 @@ export default function Cart() {
                         const have = sizeStock(p!, l.colourId, l.size);
             return (
               <article key={l.key} className="line">
-                <Link to={`/product/${p!.id}`} className="line-img" aria-label={p!.name}><Photo p={p!} ratio="4 / 5" /></Link>
+                <Link to={`/product/${p!.id}`} className="line-img" aria-label={p!.name}><Photo p={p!} ratio="4 / 5" colourId={l.colourId} /></Link>
                 <div className="line-body">
                   <div className="line-top"><div><Link to={`/product/${p!.id}`} className="line-name">{p!.name}</Link><span className="line-var">
                     <label><span className="sr">Colour for {p!.name}</span><select value={l.colourId} onChange={(e) => { const r = changeVariant(l.key, e.target.value, l.size); if (r.message) say(r.message); }}>{p!.colours.map((x) => <option key={x.id} value={x.id} disabled={p!.sizes.every((z) => sizeStock(p!, x.id, z) === 0)}>{x.name}</option>)}</select></label>
