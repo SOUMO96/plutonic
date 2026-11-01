@@ -353,3 +353,14 @@
 @media (max-width: 640px) {
   .pl main .rating, .pl main .opt-head .ulink, .pl main .crumbs a, .pl main .sec-head > a, .pl .collection-link, .pl main .lbl.ulink { display: inline-flex; align-items: center; min-height: 44px; }
 }
+
+/* Phone header: account and wishlist stay in the bar (they used to be hidden and only reachable through the menu) */
+@media (max-width: 900px) {
+  .hdr .hdr-hide { display: inline-flex; }
+  .hdr-actions { gap: 0; } .hdr-actions .ico { width: 40px; height: 44px; }
+  .hdr-in { gap: 4px; }
+}
+@media (max-width: 380px) {
+  .hdr-actions .ico { width: 36px; } .hdr-logo img { height: 38px; } .hdr .hdr-burger { width: 40px; }
+  .hdr-in { grid-template-columns: 40px 1fr auto; }
+}
