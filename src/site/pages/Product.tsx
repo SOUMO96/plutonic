@@ -61,7 +61,7 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
 
   const add = () => {
     if (!size) { setError('Please choose a size.'); return false; }
-    if (left <= 0) { setError(`Size ${size} is out of stock in ${colour.name}. You can save it to your wishlist below.`); return false; }
+    if (left <= 0) { setError(`Size ${size} is out of stock in ${colour.name}.`); return false; }
     const r = addToCart(p, colourId, size, qty);
     if (!r.ok) { setError(r.message); return false; }
     setError(''); say(`${p.name} · ${colour.name} · ${size}${qty > 1 ? ' × ' + qty : ''} added to your bag`); setAdded(true); window.setTimeout(() => setAdded(false), 1600); return true;
@@ -110,22 +110,14 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
             <span className={'stock' + (size && left > 0 && left <= 3 ? ' low' : '')} role="status">{stockText}{inBag > 0 ? ` · ${inBag} in your bag` : ''}</span></div>
 
           <div className="buy-actions" ref={buyRef}>
-            <div className="qty" role="group" aria-label="Quantity"><button type="button" aria-label="Decrease quantity" onClick={() => setQty(Math.max(1, qty - 1))}><Minus size={14} /></button><span>{qty}</span><button type="button" aria-label="Increase quantity" onClick={() => setQty(Math.min(Math.max(left, 1), qty + 1))}><Plus size={14} /></button></div>
-            <button type="button" className={'btn btn--dark btn--wide' + (added ? ' is-added' : '')} onClick={add} disabled={!!size && left <= 0}>{size && left <= 0 ? 'Out of stock' : added ? 'Added ✓' : 'Add to bag'}</button>
+            <div className="qty" role="group" aria-label="Quantity" style={size && left <= 0 ? { display: 'none' } : undefined}><button type="button" aria-label="Decrease quantity" onClick={() => setQty(Math.max(1, qty - 1))}><Minus size={14} /></button><span>{qty}</span><button type="button" aria-label="Increase quantity" onClick={() => setQty(Math.min(Math.max(left, 1), qty + 1))}><Plus size={14} /></button></div>
+            {size && left <= 0
+              ? <button type="button" className="btn btn--dark btn--wide" disabled={notified.includes(p.id)} onClick={() => notifyMe(p.id)}>{notified.includes(p.id) ? 'We’ll notify you ✓' : 'Notify me'}</button>
+              : <button type="button" className={'btn btn--dark btn--wide' + (added ? ' is-added' : '')} onClick={add}>{added ? 'Added ✓' : 'Add to bag'}</button>}
             <WishButton id={p.id} name={p.name} />
           </div>
-          {size && left <= 0 && (
-            <div className="oos" role="status">
-              <b>Out of stock</b>
-              <p>Size {size} in {colour.name} is out of stock right now. Save it to your wishlist, or ask us to tell you when it is back. Other sizes and colours are available above.</p>
-              <div className="row-gap">
-                <button type="button" className="btn btn--dark btn--sm" onClick={() => { if (!isWished(p.id)) { toggleWish(p.id); say('Saved to your wishlist'); } else say('Already in your wishlist'); }}>{isWished(p.id) ? 'Saved to wishlist ✓' : 'Save to wishlist'}</button>
-                <button type="button" className="btn btn--ghost btn--sm" disabled={notified.includes(p.id)} onClick={() => notifyMe(p.id)}>{notified.includes(p.id) ? 'We’ll notify you' : 'Notify me when back'}</button>
-              </div>
-            </div>
-          )}
           {error && !(size && left <= 0) && <p className="err" role="alert">{error}</p>}
-          <button type="button" className="btn btn--ghost btn--block" disabled={!!size && left <= 0} onClick={() => { if (add()) go('/checkout'); }}>Buy now</button>
+          {!(size && left <= 0) && <button type="button" className="btn btn--ghost btn--block" onClick={() => { if (add()) go('/checkout'); }}>Buy now</button>}
 
           <div className="delivery"><span className="lbl">Delivery to</span>
             <div className="field-row"><input inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="6-digit PIN code" aria-label="PIN code" /><button type="button" className="btn btn--ghost" onClick={checkPin}>Check</button></div>
