@@ -282,3 +282,64 @@
 .owidget-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .owidget { grid-template-columns: 56px 1fr auto 16px; }
 @media (max-width: 640px) { .owidget { grid-template-columns: 48px 1fr auto; } .opage--cols .opage-head { flex-direction: column; } }
+
+/* ───────── PLUTONIC order page: quiet editorial layout on the ivory page itself (no card, no pills, hairlines only) ───────── */
+.dash { grid-template-columns: 240px minmax(0, 1fr); gap: 72px; padding-top: 64px; }
+.dash-nav { position: sticky; top: 140px; gap: 6px; }
+.dash-nav .h3 { font: 300 24px/1.2 Manrope, sans-serif; letter-spacing: -.01em; }
+.dash-nav nav { margin-top: 28px; gap: 2px; }
+.dash-nav nav a, .dash-nav nav .linkbtn { border: 0; padding: 9px 0; min-height: 0; font: 400 14px Inter, sans-serif; color: var(--mut); text-decoration: none; position: relative; transition: color .2s ease, padding-left .2s ease; }
+.dash-nav nav a:hover, .dash-nav nav .linkbtn:hover { color: var(--fg); }
+.dash-nav a[aria-current='page'] { color: var(--fg); font-weight: 500; padding-left: 14px; }
+.dash-nav a[aria-current='page']::before { content: ''; position: absolute; left: 0; top: 50%; width: 6px; height: 1px; background: var(--fg); }
+.dash-nav nav .linkbtn { margin-top: 14px; font-size: 13px; }
+@media (max-width: 900px) { .dash { grid-template-columns: 1fr; gap: 28px; padding-top: 32px; } .dash-nav { position: static; } .dash-nav nav { flex-direction: row; flex-wrap: wrap; gap: 4px 22px; margin-top: 14px; } .dash-nav a[aria-current='page'] { padding-left: 0; text-decoration: underline; text-underline-offset: 6px; } .dash-nav a[aria-current='page']::before { display: none; } .dash-nav nav .linkbtn { margin-top: 0; } }
+
+.panel.opage--cols { background: none; border: 0; padding: 0; gap: 28px; }
+.opage-back { font: 500 11px/1.4 Manrope, sans-serif; letter-spacing: .24em; text-transform: uppercase; color: var(--mut); text-decoration: none; align-self: flex-start; } .opage-back:hover { color: var(--fg); }
+.opage--cols .opage-head { align-items: flex-end; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.opage--cols .opage-head > div { display: flex; flex-direction: column; gap: 6px; }
+.opage--cols .opage-id { font: 300 clamp(30px, 3.4vw, 42px)/1 Manrope, sans-serif; letter-spacing: -.015em; margin: 0; }
+.ostatus { font: 500 11px/1 Manrope, sans-serif; letter-spacing: .24em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 9px; white-space: nowrap; padding-bottom: 6px; }
+.ostatus::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); }
+.ostatus--bad { color: #9B2C1F; } .ostatus--bad::before { background: #9B2C1F; }
+.opage--cols .ocard-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 72px; align-items: start; }
+.opage--cols .ocard-grid > section { gap: 22px; }
+
+.opage--cols .oitems { gap: 22px; }
+.opage--cols .item-thumb { width: 72px; } .opage--cols .oitem-row { gap: 18px; align-items: flex-start; }
+.opage--cols .oitem-text { gap: 4px; display: flex; flex-direction: column; } .opage--cols .oitem-text b { font: 500 15px/1.35 Inter, sans-serif; } .opage--cols .oitem-text small { font-size: 12.5px; }
+.opage--cols .oitem-price { font: 400 15px Inter, sans-serif; }
+.opage--cols .oitem-act, .opage--cols .req-note, .opage--cols .oitems > li > .req-form, .opage--cols .oitems > li > .muted.small { margin-left: 90px; }
+.opage--cols .oitem-act { margin-top: 6px; min-height: 0; }
+.opage--cols .req-note { margin-top: 6px; }
+
+.opage--cols .osum { border-top: 1px solid var(--line); padding-top: 18px; gap: 2px; }
+.opage--cols .osum-total span { font: 500 11px/1.4 Manrope, sans-serif; letter-spacing: .24em; text-transform: uppercase; color: var(--mut); }
+.opage--cols .osum-total b { font: 400 22px Manrope, sans-serif; letter-spacing: -.01em; }
+.opage--cols .osum .bill { margin-top: 8px; }
+.ometa { display: flex; flex-direction: column; gap: 6px; } .ometa p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--mut); }
+.ohelp { align-self: flex-start; }
+
+.opage--cols .tracker { gap: 6px; }
+.opage--cols .tracker-kind { font: 500 11px/1.4 Manrope, sans-serif; letter-spacing: .24em; }
+.opage--cols .tracker .tracker-status { font: 300 clamp(22px, 2.4vw, 28px)/1.2 Manrope, sans-serif; letter-spacing: -.01em; }
+.opage--cols .tracker .tracker-sub { margin: 0 0 22px; font-size: 12.5px; }
+.opage--cols .tracker .timeline li { grid-template-columns: 14px 1fr; gap: 0 18px; padding-bottom: 20px; }
+.opage--cols .tracker .timeline li::before { left: 6.5px; top: 18px; bottom: 2px; background: var(--line2); }
+.opage--cols .tracker .timeline li .dotc { width: 14px; height: 14px; border: 1px solid var(--line2); background: transparent; margin-top: 2px; }
+.opage--cols .tracker .timeline li.done .dotc { background: var(--fg); border-color: var(--fg); }
+.opage--cols .tracker .timeline li.done .dotc svg { display: none; }
+.opage--cols .tracker .timeline li.current .dotc { box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--fg); }
+.opage--cols .tracker .timeline li.rejected .dotc { background: #9B2C1F; border-color: #9B2C1F; font-size: 0; }
+.opage--cols .tracker .timeline li b { font: 400 14.5px/1.4 Inter, sans-serif; } .opage--cols .tracker .timeline li.done b { font-weight: 500; } .opage--cols .tracker .timeline li.current b { font-weight: 600; }
+.opage--cols .tl-at, .opage--cols .tl-extra { font-size: 12.5px; } .opage--cols .tl-extra { margin-top: 1px; }
+.opage--cols .tl-row { min-height: 18px; }
+
+.owidget .ostatus { padding: 0; font-size: 10.5px; letter-spacing: .2em; color: var(--mut); } .owidget .ostatus::before { width: 5px; height: 5px; } .owidget .ostatus--bad { color: #9B2C1F; }
+.owidget-body b { font: 500 15px/1.35 Inter, sans-serif; } .owidget-side b { font: 400 16px Inter, sans-serif; }
+.opage:not(.opage--cols) > .h3 { font: 300 clamp(28px, 3vw, 36px)/1.1 Manrope, sans-serif; letter-spacing: -.015em; }
+@media (max-width: 900px) { .opage--cols .ocard-grid { grid-template-columns: 1fr; gap: 36px; } }
+@media (max-width: 640px) { .opage--cols .opage-head { flex-direction: column; align-items: flex-start; gap: 14px; } .ostatus { padding-bottom: 0; } .opage--cols .item-thumb { width: 60px; } .opage--cols .oitem-act, .opage--cols .req-note, .opage--cols .oitems > li > .req-form, .opage--cols .oitems > li > .muted.small { margin-left: 0; } }
+.opage--cols .oitems > li > .muted.small { display: block; margin-top: 6px; }
+.dash-main .opage { max-width: none; }

@@ -118,12 +118,12 @@ function OrderPage({ o }: { o: Order }) {
   const orderRefunds = refunds.filter((x) => x.orderId === o.id);
   return (
     <section className="panel opage opage--cols">
-      <Link to="/account?tab=orders" className="lbl ulink small">← All orders</Link>
-      <div className="opage-head"><div><h2 className="h2">Order #{o.id}</h2><p className="muted">Placed {day(o.createdAt)} · {orderLine(o, returns)}</p></div><span className={'status' + (o.step < 0 ? ' status--bad' : '')}>{pillOf(o, returns)}</span></div>
+      <Link to="/account?tab=orders" className="opage-back">← All orders</Link>
+      <div className="opage-head"><div><span className="lbl muted">Order · placed {day(o.createdAt)}</span><h2 className="h2 opage-id">{o.id}</h2></div><span className={'ostatus' + (o.step < 0 ? ' ostatus--bad' : '')}>{pillOf(o, returns)}</span></div>
       <div className="ocard-grid">
         <section>
           <Tracker journey={buildJourney(o, returns, refunds)} />
-          {o.step >= 0 && o.step < 3 && <div className="row-gap"><button type="button" className="linkbtn small" onClick={() => { if (window.confirm(`Cancel order ${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button></div>}
+          {o.step >= 0 && o.step < 3 && <div className="row-gap ocancel"><button type="button" className="linkbtn small" onClick={() => { if (window.confirm(`Cancel order ${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button></div>}
         </section>
         <section>
           <ul className="oitems">
@@ -145,8 +145,8 @@ function OrderPage({ o }: { o: Order }) {
           </ul>
           <OrderSummary o={o} />
           {orderRefunds.map((x) => <p key={x.id} className="muted small oref">Refund {inr(x.amount)} · {x.status === 'Refunded' ? 'sent' + (x.reference ? ` (ref ${x.reference})` : '') : 'being processed'}</p>)}
-          <p className="muted small">Delivering to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state}</p>
-          <Link to="/support" className="lbl ulink small">Need help with this order?</Link>
+          <div className="ometa"><span className="lbl muted">Delivering to</span><p>{o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state}</p></div>
+          <Link to="/support" className="ulink small ohelp">Need help with this order?</Link>
         </section>
       </div>
     </section>
@@ -167,7 +167,7 @@ function OrderWidget({ o }: { o: Order }) {
         <small className="muted">Order #{o.id}</small>
         <span className={'owidget-eta' + (o.step < 0 ? ' bad' : '')}>{line}</span>
       </span>
-      <span className="owidget-side"><b>{inr(o.total)}</b><span className={'status' + (o.step < 0 ? ' status--bad' : '')}>{pillOf(o, returns)}</span></span>
+      <span className="owidget-side"><b>{inr(o.total)}</b><span className={'ostatus' + (o.step < 0 ? ' ostatus--bad' : '')}>{pillOf(o, returns)}</span></span>
       <ChevronRight size={16} aria-hidden="true" className="owidget-go" />
     </Link>
   );
