@@ -94,6 +94,8 @@ add('POST', '/orders/:id/cancel', 'required', async ({ db, params }) => must(awa
 add('GET', '/returns', 'required', async ({ db }) => ({ items: must(await db.from('returns').select('data').order('created_at', { ascending: false }).limit(200)).map((r: any) => r.data) }));
 add('POST', '/returns', 'required', async ({ db, body }) => {
   const b = await body();
+  // several items in ONE request: one action for all of them (create_return_batch refuses anything else)
+  if (Array.isArray(b.items)) return created(must(await db.rpc('create_return_batch', { p: { orderId: b.orderId, kind: b.kind, reason: b.reason, note: b.note, items: b.items } })));
   return created(must(await db.rpc('create_return', { p: { orderId: b.orderId, itemIndex: b.itemIndex, kind: b.kind, reason: b.reason, note: b.note, exchangeSize: b.exchangeSize, exchangeColour: b.exchangeColour } })));
 }, { bucket: 'write', max: 20 });
 add('GET', '/refunds', 'required', async ({ db }) => ({ items: must(await db.from('refunds').select('id, order_id, return_id, source, amount, status, reference, created_at, processed_at').order('created_at', { ascending: false }).limit(200)) }));

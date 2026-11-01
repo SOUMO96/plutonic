@@ -477,3 +477,67 @@ html, body { max-width: 100%; overflow-x: clip; }
 .pin-hint { display: block; margin-top: 6px; font: 400 12.5px/1.4 Inter, sans-serif; color: var(--mut, #5E5C58); }
 .pin-hint--ok::before { content: '✓ '; color: var(--ok, #2F5D3A); } .pin-hint--missing { color: var(--err, #A33A2B); }
 .pin-hint--estimate::before { content: '≈ '; }
+
+/* ───────── One order-level Return / Exchange section (inline, no modal) ───────── */
+.rx { display: flex; flex-direction: column; gap: 0; }
+.rx-none { margin: 0; }
+.rx-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; padding: 0 20px; background: #090909; color: #F2F0EB; border: 0; border-radius: 10px; cursor: pointer; font: 500 15px Inter, sans-serif; letter-spacing: .01em; position: relative; transition: background .25s ease, transform .25s ease, box-shadow .25s ease; }
+.rx-btn > svg:last-child { position: absolute; right: 20px; transition: transform .25s ease; }
+.rx-btn:hover { background: #292929; box-shadow: 0 8px 22px rgba(0,0,0,.18); } .rx-btn:active { transform: scale(.995); }
+.rx-btn:focus-visible { outline: 2px solid #090909; outline-offset: 3px; }
+/* the section grows and shrinks smoothly, pushing what is below it down (no jump) */
+.rx-wrap { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition: grid-template-rows .4s cubic-bezier(.16,1,.3,1), opacity .3s ease, visibility 0s linear .4s; }
+.rx-wrap.open { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition: grid-template-rows .4s cubic-bezier(.16,1,.3,1), opacity .3s ease .05s, visibility 0s; }
+.rx-inner { min-height: 0; overflow: hidden; }
+.rx-panel { margin-top: 14px; padding: 18px; display: flex; flex-direction: column; gap: 16px; background: rgba(255,255,255,.55); border: 1px solid var(--line, rgba(9,9,9,.14)); border-radius: 12px; }
+.rx-title { display: flex; align-items: center; gap: 10px; margin: 0; font: 500 15px Inter, sans-serif; } .rx-panel > p { margin: -8px 0 0; }
+.rx-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--line2, rgba(9,9,9,.3)); border-radius: 10px; overflow: hidden; background: #fff; }
+.rx-seg button { min-height: 44px; border: 0; background: transparent; cursor: pointer; font: 500 13.5px Inter, sans-serif; transition: background .2s ease, color .2s ease; }
+.rx-seg button.on { background: #090909; color: #F2F0EB; } .rx-seg button:not(.on):hover { background: rgba(9,9,9,.05); }
+.rx-items { display: flex; flex-direction: column; margin: 0; padding: 0; }
+.rx-items > li { padding: 14px 0; border-top: 1px solid var(--line, rgba(9,9,9,.12)); transition: opacity .2s ease; } .rx-items > li:first-child { border-top: 0; }
+.rx-items > li.is-off { opacity: .6; }
+.rx-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto 24px; gap: 14px; align-items: start; cursor: pointer; } .is-off .rx-row { cursor: not-allowed; }
+.rx-row .item-thumb { width: 56px; } .rx-row .oitem-price { font: 400 14.5px Inter, sans-serif; white-space: nowrap; }
+.rx-why { display: block; margin-top: 4px; font: 400 12.5px/1.45 Inter, sans-serif; color: var(--muted, #5E5C58); }
+.rx-check { appearance: none; -webkit-appearance: none; width: 22px; height: 22px; margin: 0; border: 1.5px solid #090909; border-radius: 5px; background: #fff; display: grid; place-content: center; cursor: pointer; transition: background .15s ease; justify-self: end; }
+.rx-check::after { content: ''; width: 10px; height: 6px; border-left: 2px solid #F2F0EB; border-bottom: 2px solid #F2F0EB; transform: rotate(-45deg) scale(0); margin-top: -2px; transition: transform .15s ease; }
+.rx-check:checked { background: #090909; } .rx-check:checked::after { transform: rotate(-45deg) scale(1); }
+.rx-check:disabled { border-color: rgba(9,9,9,.3); background: rgba(9,9,9,.06); cursor: not-allowed; } .rx-check:focus-visible { outline: 2px solid #090909; outline-offset: 3px; }
+.rx-size { margin: 12px 0 0 70px; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; align-items: center; background: rgba(9,9,9,.04); border-radius: 8px; animation: rxin .25s ease; }
+.rx-size label { display: flex; align-items: center; gap: 10px; font: 500 12.5px Inter, sans-serif; } .rx-size select { min-height: 40px; min-width: 120px; padding: 0 10px; border: 1px solid var(--line2, rgba(9,9,9,.3)); border-radius: 8px; background: #fff; font: 400 14px Inter, sans-serif; }
+.rx-size .rx-why { grid-column: 1 / -1; margin: 0; }
+@keyframes rxin { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.rx-reason { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; padding-top: 14px; border-top: 1px solid var(--line, rgba(9,9,9,.12)); font: 500 14px Inter, sans-serif; }
+.rx-reason select { min-height: 44px; padding: 0 12px; border: 1px solid var(--line2, rgba(9,9,9,.3)); border-radius: 8px; background: #fff; font: 400 14px Inter, sans-serif; width: 100%; }
+.rx-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rx-go { min-height: 48px; padding: 0 26px; background: #090909; color: #F2F0EB; border: 0; border-radius: 10px; cursor: pointer; font: 500 14.5px Inter, sans-serif; transition: background .2s ease, opacity .2s ease; margin-left: auto; } .rx-go:hover:not(:disabled) { background: #292929; } .rx-go:disabled { opacity: .6; cursor: progress; }
+.rx-review { display: flex; flex-direction: column; gap: 12px; } .rx-review p { margin: 0; }
+.rx-review ul { margin: 0; padding: 0; display: flex; flex-direction: column; } .rx-review li { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; border-top: 1px solid var(--line, rgba(9,9,9,.12)); font-size: 14px; }
+.rx-sum { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; padding-top: 10px; border-top: 1px solid var(--line2, rgba(9,9,9,.3)); } .rx-sum b { font: 500 18px Manrope, sans-serif; }
+@media (max-width: 640px) {
+  .rx-panel { padding: 14px; }
+  .rx-row { grid-template-columns: 52px minmax(0, 1fr) 24px; } .rx-row .item-thumb { width: 52px; } .rx-row .oitem-price { grid-column: 2; grid-row: 2; font-size: 13.5px; }
+  .rx-row .rx-check { grid-column: 3; grid-row: 1; }
+  .rx-size { margin-left: 0; grid-template-columns: 1fr; } .rx-size label { justify-content: space-between; }
+  .rx-reason { grid-template-columns: 1fr; gap: 8px; } .rx-foot .rx-go { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .rx-wrap, .rx-wrap.open, .rx-size, .rx-btn, .rx-check::after { transition: none; animation: none; } }
+/* specificity: beat the general form-label rules */
+.rx .rx-row { display: grid; flex-direction: initial; grid-template-columns: 56px minmax(0, 1fr) auto 24px; gap: 14px; align-items: start; margin: 0; }
+.rx .rx-size { display: grid; grid-template-columns: 1fr auto; }
+.rx .rx-size label { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.rx .rx-reason { display: grid; grid-template-columns: auto 1fr; flex-direction: initial; gap: 14px; align-items: center; }
+.rx .rx-review label { display: flex; flex-direction: column; gap: 6px; font: 500 13px Inter, sans-serif; } .rx .rx-review textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line2, rgba(9,9,9,.3)); border-radius: 8px; background: #fff; font: 400 14px Inter, sans-serif; }
+@media (max-width: 640px) {
+  .rx .rx-row { grid-template-columns: 52px minmax(0, 1fr) 24px; gap: 12px; }
+  .rx .rx-row .item-thumb { grid-column: 1; grid-row: 1 / span 2; }
+  .rx .rx-row .oitem-text { grid-column: 2; grid-row: 1; } .rx .rx-row .oitem-price { grid-column: 2; grid-row: 2; }
+  .rx .rx-row .rx-check { grid-column: 3; grid-row: 1; }
+  .rx .rx-size { grid-template-columns: 1fr; margin-left: 0; } .rx .rx-size label { justify-content: space-between; }
+  .rx .rx-reason { grid-template-columns: 1fr; gap: 8px; }
+}
+/* while the panel is open it shows the items itself, so the plain list steps aside */
+.oitems.is-hidden { display: none; }
+.rx .rx-size { grid-template-columns: 1fr; margin-left: 70px; gap: 8px; } .rx .rx-size label { justify-content: space-between; } .rx .rx-size select { flex: 1; max-width: 190px; }
+@media (max-width: 640px) { .rx .rx-size { margin-left: 0; } }

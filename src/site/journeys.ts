@@ -1,5 +1,5 @@
 import { ORDER_STEPS, type Order, type Refund, type ReturnReq } from './store';
-import { flowFor, stepLabel } from './returnRules';
+import { batchMembers, flowFor, stepLabel } from './returnRules';
 import { inr } from './catalog';
 
 /**
@@ -43,9 +43,20 @@ export function pickRequest(reqs: ReturnReq[], focusId?: string): ReturnReq | un
   return [...reqs].sort((a, b) => lastAt(b) - lastAt(a))[0];
 }
 
+/** The member of a multi-item request that is least advanced (declined ones are ignored unless every one was declined). */
+function leadOf(group: ReturnReq[]): ReturnReq {
+  const live = group.filter((r) => r.status !== 'Rejected');
+  const pool = live.length ? live : group;
+  const flow = flowFor(pool[0].kind);
+  return [...pool].sort((a, b) => flow.indexOf(a.status) - flow.indexOf(b.status))[0];
+}
+
 export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], focusId?: string): Journey {
   const reqs = returns.filter((r) => r.orderId === o.id);
-  const req = o.step >= 0 ? pickRequest(reqs, focusId) : undefined;
+  const picked = o.step >= 0 ? pickRequest(reqs, focusId) : undefined;
+  // Items sent together are ONE journey. It follows the item that is furthest behind, so the tracker never claims more than is true for all of them.
+  const group = picked ? batchMembers(reqs, picked) : [];
+  const req = picked && group.length > 1 ? leadOf(group) : picked;
 
   if (o.step < 0) {
     return { kind: 'cancelled', id: '', title: 'Delivery', status: 'Cancelled', subtitle: `Order #${o.id}`,
@@ -67,12 +78,15 @@ export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], 
   const flow = flowFor(req.kind);
   const rejected = req.status === 'Rejected';
   const reached = rejected ? Math.max(0, ...hist.filter((h) => h.status !== 'Rejected').map((h) => flow.indexOf(h.status))) : flow.indexOf(req.status);
-  const refund = refunds.find((x) => x.returnId === req.id);
+  // one refund line for the whole request: the total, and "sent" only once every item's refund has been paid
+  const mine = refunds.filter((x) => group.length > 1 ? group.some((m) => m.id === x.returnId) : x.returnId === req.id);
+  const refund = mine.length ? { amount: mine.reduce((n, x) => n + x.amount, 0), status: mine.every((x) => x.status === 'Refunded') ? 'Refunded' : 'Pending', reference: mine.length === 1 ? mine[0].reference : undefined } : undefined;
+  const many = group.length > 1;
   const detail = (s: ReturnReq['status']): string => {
     const t = at(s); const stamp = t ? when(t) : '';
     if (s === 'Pickup scheduled' && req.pickupDate) return `${stamp} · pickup ${longDay(req.pickupDate)}, ${req.pickupSlot ?? ''}`;
     if (s === 'Replacement shipped') return `${stamp} · Courier AWB ${req.awb ?? req.id.replace(/\D/g, '') + '02'}`;
-    if (s === 'Completed' && req.kind === 'return') return `${stamp}${refund ? ` · refund of ${inr(refund.amount)} for this item ${refund.status === 'Refunded' ? `sent${refund.reference && refund.reference !== 'SIMULATED' ? ` (ref ${refund.reference})` : ''}` : 'being processed (5–7 working days)'}` : ''}`;
+    if (s === 'Completed' && req.kind === 'return') return `${stamp}${refund ? ` · refund of ${inr(refund.amount)} for ${many ? 'these items' : 'this item'} ${refund.status === 'Refunded' ? `sent${refund.reference && refund.reference !== 'SIMULATED' ? ` (ref ${refund.reference})` : ''}` : 'being processed (5–7 working days)'}` : ''}`;
     return stamp;
   };
   const steps: JourneyStep[] = flow.slice(0, rejected ? reached + 1 : flow.length).map((s, i) => ({
@@ -86,8 +100,11 @@ export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], 
   return {
     kind: req.kind, id: req.id, title: req.kind === 'exchange' ? 'Exchange' : 'Return',
     status: rejected ? 'Request declined' : req.status === 'Requested' ? 'Waiting for our response' : req.status === 'Completed' ? stepLabel(req.kind, 'Completed') : stepLabel(req.kind, cur),
-    subtitle: `${req.productName} · ${req.variant}${req.kind === 'exchange' && req.exchangeTo ? ` → size ${req.exchangeTo.size}` : ''} · Order #${o.id} · Request ${req.id}`,
+    subtitle: many
+      ? `${group.map((m) => `${m.productName} (${m.piece?.size ?? ''}${m.kind === 'exchange' && m.exchangeTo ? ` → ${m.exchangeTo.size}` : ''})`).join(' · ')} · Order #${o.id} · Requests ${group.map((m) => m.id).join(', ')}`
+      : `${req.productName} · ${req.variant}${req.kind === 'exchange' && req.exchangeTo ? ` → size ${req.exchangeTo.size}` : ''} · Order #${o.id} · Request ${req.id}`,
     steps,
-    note: [req.adminNote && !rejected ? `Message from PLUTONIC: ${req.adminNote}` : '', req.status === 'Pickup scheduled' ? 'Please keep the item unworn with tags, in its packaging.' : ''].filter(Boolean).join(' ') || undefined,
+    note: [req.adminNote && !rejected ? `Message from PLUTONIC: ${req.adminNote}` : '', req.status === 'Pickup scheduled' ? (many ? 'Please keep every item unworn with tags, in its packaging.' : 'Please keep the item unworn with tags, in its packaging.') : '',
+      many && !rejected && group.some((m) => m.status === 'Rejected') ? `${group.filter((m) => m.status === 'Rejected').length} of the ${group.length} items could not be accepted${group.find((m) => m.status === 'Rejected')?.adminNote ? `: ${group.find((m) => m.status === 'Rejected')!.adminNote}` : '.'}` : ''].filter(Boolean).join(' ') || undefined,
   };
 }

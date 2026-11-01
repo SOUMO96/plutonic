@@ -152,3 +152,62 @@ export function applyUpdate(r: ReturnReq, status: Status, u: Update, now = Date.
   if (status === 'Rejected' && !u.note?.trim()) return { ok: false, error: 'Add a short reason so the customer knows why.' };
   return { ok: true, ret: next };
 }
+
+/** One selected item inside a multi-item request. */
+export type BatchItem = { itemIndex: number; exchangeSize?: string; reason?: string };
+export type BatchInput = { orderId: string; kind: ReturnReq['kind']; reason?: string; note?: string; items: BatchItem[] };
+
+/**
+ * Check a whole request (ONE action, several items) and build the linked requests. All or nothing: the first problem refuses the lot.
+ * The live database runs the same checks inside create_return_batch(); this is the browser-only demo's copy.
+ */
+export function buildBatch(
+  o: Order, input: BatchInput, returns: ReturnReq[],
+  ctx: { sizesOf: (productId: string) => string[] | null; stockOf: (productId: string, colourId: string, size: string) => number; nextId: (n: number) => string },
+  now = Date.now(),
+): { ok: true; requests: ReturnReq[] } | { ok: false; error: string } {
+  if (input.kind !== 'return' && input.kind !== 'exchange') return { ok: false, error: 'Choose return or exchange.' };
+  if (o.step !== 4) return { ok: false, error: 'Only delivered orders can be returned or exchanged.' };
+  if (!input.items.length) return { ok: false, error: 'Select the items you want to return or exchange.' };
+  if (new Set(input.items.map((i) => i.itemIndex)).size !== input.items.length) return { ok: false, error: 'Each item can only be selected once.' };
+  const open = returns.find((r) => r.orderId === o.id && isOpen(r));
+  if (open) return { ok: false, error: 'Another request on this order is in progress. You can start a new one when it is finished.' };
+  const batchId = 'B-' + Math.random().toString(16).slice(2, 10);
+  const need: Record<string, number> = {};
+  const out: ReturnReq[] = [];
+  for (const [n, bi] of input.items.entries()) {
+    if ((bi as { kind?: string }).kind && (bi as { kind?: string }).kind !== input.kind) return { ok: false, error: 'A request can be either a return or an exchange, not both. Please send them separately.' };
+    const it = o.items[bi.itemIndex]; const name = it?.name ?? 'That item';
+    if (!it || it.cancelled) return { ok: false, error: 'That item cannot be returned or exchanged.' };
+    const reason = (bi.reason ?? input.reason ?? '').trim();
+    if (reason.length < 2) return { ok: false, error: 'Choose a reason.' };
+    const st = itemState(o, bi.itemIndex, returns, now);
+    if (st.returned) return { ok: false, error: `${name} has already been returned. Please place a new order.` };
+    if (!st.canReturn) return { ok: false, error: st.note ?? `${name} cannot be returned or exchanged.` };
+    if (input.kind === 'exchange' && !st.canExchange) return { ok: false, error: `${name} has already been exchanged once. It can only be returned now.` };
+    const piece = currentPiece(o, bi.itemIndex, returns);
+    let exchangeTo: ReturnReq['exchangeTo']; let refundAmount = 0;
+    if (input.kind === 'exchange') {
+      const size = (bi.exchangeSize ?? '').trim();
+      if (!size) return { ok: false, error: `Choose the size you want instead for ${name}.` };
+      if (size === piece.size) return { ok: false, error: `Choose a different size for ${name}.` };
+      const sizes = ctx.sizesOf(it.productId);
+      if (!sizes) return { ok: false, error: `${name} is no longer available for exchange. Please request a return instead.` };
+      if (!sizes.includes(size)) return { ok: false, error: `That size does not exist for ${name}.` };
+      const key = `${it.productId}:${piece.colourId}:${size}`;
+      need[key] = (need[key] ?? 0) + it.qty;
+      if (ctx.stockOf(it.productId, piece.colourId, size) < need[key]) return { ok: false, error: `Size ${size} of ${name} is not in stock right now. Choose another size, or request a return.` };
+      exchangeTo = { colourId: piece.colourId, colourName: piece.colourName, size };   // same colour only
+    } else refundAmount = refundForItem(o, bi.itemIndex);
+    out.push({
+      id: ctx.nextId(n), orderId: o.id, itemIndex: bi.itemIndex, productId: it.productId, productName: it.name, variant: `${piece.colourName} · ${piece.size}`, piece, qty: it.qty,
+      kind: input.kind, reason, note: (input.note ?? '').slice(0, 1000), exchangeTo, refundAmount, status: 'Requested', createdAt: now,
+      batchId, batchSize: input.items.length, history: [{ status: 'Requested', at: now }],
+    });
+  }
+  return { ok: true, requests: out };
+}
+
+/** The requests that were sent together with this one (itself included), oldest first. */
+export const batchMembers = (returns: ReturnReq[], r: ReturnReq): ReturnReq[] =>
+  r.batchId ? returns.filter((x) => x.orderId === r.orderId && x.batchId === r.batchId).sort((a, b) => a.itemIndex! - b.itemIndex!) : [r];

@@ -4,7 +4,7 @@ import {
   type Product,
 } from './catalog';
 import { CUSTOMER_CANCEL_BEFORE, cancelItem as cancelItemRule, cancelWhole as cancelWholeRule, type Cancelled } from './orderCancel';
-import { applyUpdate, currentPiece, requestError, type Update } from './returnRules';
+import { applyUpdate, buildBatch, currentPiece, requestError, type BatchInput, type Update } from './returnRules';
 import { isLive, supabase } from './supabase';
 import { parseW, wkey } from './wishlist';
 
@@ -49,6 +49,8 @@ export type ReturnReq = {
   refundAmount?: number;
   pickupDate?: string; pickupSlot?: string; adminNote?: string;
   history?: { status: ReturnReq['status']; at: number }[];
+  /** Requests sent together (one action, several items) share a batch; they move through the same journey and are tracked as one. */
+  batchId?: string; batchSize?: number;
   /** Set by the automation when a request needs a person (it was not auto-approved). */
   needsReview?: boolean; reviewReason?: string;
   /** Courier tracking numbers: for the pickup, and for the replacement parcel of an exchange. */
@@ -150,6 +152,8 @@ export type AdminStatus = 'idle' | 'loading' | 'ready' | 'error';
 export type AutomationLog = { id: number; at: number; subject: string; action: string; detail?: string; level: 'info' | 'review' | 'error' };
 export type Automation = { mode: string; settings: Record<string, string>; log: AutomationLog[] };
 type AdminData = { products: Product[]; orders: Order[]; returns: ReturnReq[]; refunds: Refund[]; reviews: Review[]; coupons: Coupon[]; automation?: Automation };
+/** One request, ONE action (return or exchange), several items. */
+export type NewReturnBatch = BatchInput;
 export type NewReturn = { orderId: string; itemIndex: number; kind: 'exchange' | 'return'; reason: string; note: string; exchangeSize?: string };
 export type Auth = {
   signUp: (p: { email: string; password: string; firstName: string; lastName: string; mobile: string; fit?: string }) => Promise<Result & { needsConfirm?: boolean }>;
@@ -188,6 +192,8 @@ export type Store = {
   returns: ReturnReq[]; refunds: Refund[];
   /** Customer: ask to return or exchange one item. Resolves with an error message if the rules refuse it. */
   createReturn: (r: NewReturn) => Promise<{ ok: boolean; message: string; request?: ReturnReq }>;
+  /** Send one request for several items (all returns, or all exchanges). All or nothing. */
+  createReturnBatch: (r: NewReturnBatch) => Promise<{ ok: boolean; message: string; requests?: ReturnReq[] }>;
   /** Administrator: move a request along (approve, schedule pickup, picked up, complete, reject). */
   updateReturn: (id: string, status: ReturnReq['status'], u?: Update) => Promise<{ ok: boolean; message: string }>;
   markRefunded: (id: number | string, reference: string) => Promise<boolean>;
@@ -590,6 +596,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, returns: [request, ...s.returns] }));
     return { ok: true, message: 'Request sent', request };
   };
+  const createReturnBatch: Store['createReturnBatch'] = async (r) => {
+    if (isLive && supabase) {
+      if (r.items.length === 1) {   // one item: the single-item function (works even before the multi-item database update)
+        const only = r.items[0];
+        const one = await createReturn({ orderId: r.orderId, itemIndex: only.itemIndex, kind: r.kind, reason: only.reason ?? r.reason ?? '', note: r.note ?? '', exchangeSize: only.exchangeSize });
+        return one.ok ? { ok: true, message: one.message, requests: one.request ? [one.request] : [] } : { ok: false, message: one.message };
+      }
+      const { data, error } = await supabase.rpc('create_return_batch', { p: r });
+      if (error) {
+        if (error.code === 'PGRST202' || /create_return_batch/.test(error.message)) return { ok: false, message: 'Sending several items together needs a small database update that has not been applied yet. Please send one item at a time for now.' };
+        return { ok: false, message: error.message };
+      }
+      const made = (data as ReturnReq[]) ?? [];
+      setState((s) => ({ ...s, returns: [...made, ...s.returns] }));
+      kickAutomation();
+      return { ok: true, message: 'Request sent', requests: made };
+    }
+    // Browser demo: the same checks as the database function
+    const o = state.orders.find((x) => x.id === r.orderId);
+    if (!o) return { ok: false, message: 'Order not found.' };
+    const built = buildBatch(o, r, state.returns, {
+      sizesOf: (id) => allProducts.find((x) => x.id === id)?.sizes ?? null,
+      stockOf: (id, colourId, size) => { const p = allProducts.find((x) => x.id === id); return p ? sizeStock(p, colourId, size) : 0; },
+      nextId: (n) => 'R-' + (1001 + state.returns.length + n),
+    });
+    if ('error' in built) return { ok: false, message: built.error };
+    setState((s) => ({ ...s, returns: [...built.requests, ...s.returns] }));
+    return { ok: true, message: 'Request sent', requests: built.requests };
+  };
   const refreshAdmin = useCallback(async () => {
     if (!isLive) return;   // the browser-only demo has no server data to refresh
     try { const r = await fetch('/api/admin/data', { credentials: 'same-origin', cache: 'no-store' }); if (r.ok) setAdminData((await r.json()) as AdminData); } catch { /* keep what we have */ }
@@ -776,7 +811,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cart: state.cart, cartCount: state.cart.reduce((n, l) => n + l.qty, 0), addToCart, setQty, removeLine, changeVariant, moveToWishlist,
     wishlist: state.wishlist, isWished: (id) => state.wishlist.some((k) => parseW(k).productId === id), isWishedVariant: (id, colourId, size) => state.wishlist.includes(wkey(id, colourId, size)), toggleWish, removeWishProduct,
     coupon, applyCoupon, removeCoupon, price, placeOrder,
-    orders: adminData?.orders ?? state.orders, advanceOrder, cancelOrder, returns: adminData?.returns ?? state.returns, refunds: adminData?.refunds ?? state.refunds, createReturn, updateReturn, markRefunded,
+    orders: adminData?.orders ?? state.orders, advanceOrder, cancelOrder, returns: adminData?.returns ?? state.returns, refunds: adminData?.refunds ?? state.refunds, createReturn, createReturnBatch, updateReturn, markRefunded,
     reviews: adminData?.reviews ?? state.reviews, addReview, setReviewStatus,
     user: state.user, signIn, signOut, updateUser, addresses: state.addresses, saveAddress, removeAddress,
     coupons: adminData?.coupons ?? state.coupons, saveCoupon, saveProduct, createProduct, archiveProduct, restoreProduct,
