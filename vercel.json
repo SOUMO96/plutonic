@@ -1,7 +1,12 @@
 {
   "framework": "vite",
-  "buildCommand": "npm run prepare:video && npm run build",
+  "buildCommand": "(npm run prepare:video || echo \"intro video skipped\") && npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",
