@@ -145,7 +145,8 @@ function OrderPage({ o }: { o: Order }) {
             })}
           </ul>
           <OrderSummary o={o} />
-          {orderRefunds.map((x) => <p key={x.id} className="muted small oref">Refund {inr(x.amount)} · {x.status === 'Refunded' ? 'sent' + (x.reference ? ` (ref ${x.reference})` : '') : 'being processed'}</p>)}
+          {orderRefunds.map((x) => <p key={x.id} className="muted small oref">Refund of {inr(x.amount)}{x.returnId ? ' for a returned item' : ' for cancelled items'} · {x.status === 'Refunded' ? 'sent' + (x.reference && x.reference !== 'SIMULATED' ? ` (ref ${x.reference})` : '') : 'being processed'}</p>)}
+          {orderRefunds.length > 0 && o.items.some((i) => !i.cancelled) && <p className="muted small oref">The other items in this order stay with you.</p>}
           <div className="ometa"><span className="lbl muted">Delivering to</span><p>{o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state}</p></div>
           <Link to="/support" className="ulink small ohelp">Need help with this order?</Link>
         </section>

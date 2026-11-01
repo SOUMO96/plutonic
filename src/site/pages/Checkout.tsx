@@ -164,7 +164,7 @@ export function Confirmation({ route }: { route: Route }) {
   return (
     <div className="pl-wrap confirm">
       <span className="check-draw" aria-hidden="true"><svg viewBox="0 0 52 52" width="56" height="56" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="26" cy="26" r="24" /><path d="M15 27l8 8 15-17" /></svg></span><span className="lbl muted">Order confirmed · demonstration</span><h1 className="h1">Thank you.</h1>
-      <p className="body">Your order <b>#{o.id}</b> is confirmed.{o.paymentStatus === 'paid' ? ' Payment received.' : ''}{o.paymentStatus === 'paid' || o.paymentStatus === 'cod' ? '' : ` A confirmation has been sent to ${o.email}. This is a demonstration order: the payment was simulated, and nothing was charged, packed or shipped.`}</p>
+      <p className="body">Your order <b>#{o.id}</b> is confirmed.{o.paymentStatus === 'paid' ? ' Payment received.' : ''}{o.paymentStatus === 'paid' || o.paymentStatus === 'cod' ? '' : ` A confirmation has been sent to ${o.email}. This is a demonstration order: the payment was simulated and nothing was charged. The delivery is a pretend courier, so no parcel is really sent.`}</p>
       <p className="muted">{deliveryLine(o)}</p>
       <div className="confirm-card">
         <ul className="oitems">{o.items.map((i, n) => <li key={n}><div className="oitem-row"><span className="oitem-text"><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}</small></span><span className="oitem-price">{inr(i.price * i.qty)}</span></div></li>)}</ul>

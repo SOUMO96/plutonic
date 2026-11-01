@@ -461,3 +461,14 @@
   .camp--women .btn--ghost { color: #F2F0EB; border-color: rgba(242,240,235,.5); }
   .camp--women .row-gap { gap: 10px; flex-wrap: nowrap; } .camp--women .row-gap .btn { flex: 1; min-width: 0; padding-left: 8px; padding-right: 8px; justify-content: center; text-align: center; }
 }
+
+/* Nothing is ever wider than the screen: gutters on every page, rows that wrap, long words that break */
+html, body { max-width: 100%; overflow-x: clip; }
+.pl-wrap.confirm { padding-left: clamp(20px, 5vw, 80px); padding-right: clamp(20px, 5vw, 80px); }   /* the order-confirmed page had no side margins on a phone */
+.pl main { min-width: 0; }
+.tl-row { flex-wrap: wrap; column-gap: 12px; row-gap: 0; } .tl-row b { min-width: 0; overflow-wrap: anywhere; } .tl-at { white-space: normal; }
+.opage, .opage *, .confirm, .confirm * { overflow-wrap: anywhere; }
+.opage .oitem-row, .opage .opage-head { min-width: 0; } .oitem-text { min-width: 0; }
+.confirm-card, .confirm .oitems { min-width: 0; max-width: 100%; }
+@media (max-width: 640px) { .opage--cols .opage-head { gap: 10px; } .osum-total { flex-wrap: wrap; gap: 4px 12px; } }
+@media (max-width: 640px) { .confirm .row-gap { flex-direction: column; align-items: stretch; } .confirm .row-gap .btn { width: 100%; justify-content: center; text-align: center; } }

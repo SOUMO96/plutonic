@@ -72,7 +72,7 @@ export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], 
     const t = at(s); const stamp = t ? when(t) : '';
     if (s === 'Pickup scheduled' && req.pickupDate) return `${stamp} · pickup ${longDay(req.pickupDate)}, ${req.pickupSlot ?? ''}`;
     if (s === 'Replacement shipped') return `${stamp} · Courier AWB ${req.awb ?? req.id.replace(/\D/g, '') + '02'}`;
-    if (s === 'Completed' && req.kind === 'return') return `${stamp}${refund ? ` · refund ${inr(refund.amount)} ${refund.status === 'Refunded' ? `sent${refund.reference ? ` (ref ${refund.reference})` : ''}` : 'being processed (5–7 working days)'}` : ''}`;
+    if (s === 'Completed' && req.kind === 'return') return `${stamp}${refund ? ` · refund of ${inr(refund.amount)} for this item ${refund.status === 'Refunded' ? `sent${refund.reference && refund.reference !== 'SIMULATED' ? ` (ref ${refund.reference})` : ''}` : 'being processed (5–7 working days)'}` : ''}`;
     return stamp;
   };
   const steps: JourneyStep[] = flow.slice(0, rejected ? reached + 1 : flow.length).map((s, i) => ({
