@@ -90,6 +90,8 @@
 .sec { padding: clamp(56px, 8vw, 96px) 0; background: var(--bg); color: var(--fg); }
 .sec--pad0 { padding-top: 0; } .sec-pad { padding: 48px 0; }
 .sec--charcoal { --bg: #171717; --fg: #F2F0EB; --mut: #A9A59D; --line: rgba(255,255,255,.12); --line2: rgba(242,240,235,.4); --field: rgba(255,255,255,.06); }
+.sec--dark { --bg: #090909; --fg: #F2F0EB; --mut: #A9A59D; --line: rgba(255,255,255,.12); --line2: rgba(242,240,235,.4); --field: rgba(255,255,255,.06); background: var(--bg); color: var(--fg); }
+.camp-wrap { padding-bottom: 64px; }
 .sec--ivory { --bg: #F2F0EB; --fg: #090909; --mut: #5E5C58; --line: rgba(9,9,9,.14); --line2: rgba(9,9,9,.3); --field: #fff; }
 .sec--stone { --bg: #E7E3DB; --fg: #090909; --mut: #5E5C58; --line: rgba(9,9,9,.14); --line2: rgba(9,9,9,.3); --field: #fff; }
 .sec-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; } .sec-head > div { display: flex; flex-direction: column; gap: 10px; }

@@ -35,7 +35,7 @@ The M87* frame is an observational reconstruction. The moving footage is a NASA 
 
 ## Storefront
 
-After the intro and the FOR HIM / FOR HER gateway the site is a hash-routed storefront (`src/site/`) built from the approved Claude Design canvas ("PLUTONIC — Premium Activewear E-commerce"). Routes: `#/` home, `#/men`, `#/women`, `#/shop` (listing, filters, sort, search), `#/product/:id`, `#/cart`, `#/checkout`, `#/order/:id`, `#/account`, `#/tracking/:id`, `#/wishlist`, `#/returns`, `#/admin`, `#/about`, `#/support`. A shared link such as `https://…/#/product/m2` skips the intro and opens the store directly.
+After the cinematic intro (first visit only) the site opens on the homepage. It is a hash-routed storefront (`src/site/`) built from the approved Claude Design canvas ("PLUTONIC — Premium Activewear E-commerce"). Routes: `#/` home, `#/men`, `#/women`, `#/shop` (listing, filters, sort, search), `#/product/:id`, `#/cart`, `#/checkout`, `#/order/:id`, `#/account`, `#/tracking/:id`, `#/wishlist`, `#/returns`, `#/about`, `#/support`. `#/shop` accepts `g` (men/women), `cat`, `size`, `colour`, `fabric`, `price`, `q`, `new=1` and `sort`; the URL is the single source of truth, so filters survive refresh and Back. A shared link such as `https://…/#/product/m2`, skips the intro; every fresh load of the site (including `/#/`) plays it, and the footer has a "Replay the welcome film" link.
 
 - `src/site/catalog.ts` is the single product dataset (16 demonstration products, sizes, colours, per-size stock, prices in ₹). Every page reads products through `useStore()`.
 - `src/site/store.tsx` holds cart, wishlist, coupons, orders, returns, reviews, account and admin edits in `localStorage` (key `plutonic-demo-store-v1`).
@@ -44,4 +44,96 @@ After the intro and the FOR HIM / FOR HER gateway the site is a hash-routed stor
 
 ### What is real and what is simulated
 
-This is a front-end implementation. There is **no backend**: sign-in (mobile OTP code `123456`, any email and password), payment, order processing, delivery tracking steps and the admin dashboard are simulated in the browser, and the admin has no authentication. Stock decrements when an order is placed and admin edits (products, stock, coupons, returns, reviews, order status) show up on the storefront immediately, but only in the same browser. Replace `store.tsx` with calls to a real API (auth, inventory, payments, orders) to go live. Legal and policy text, the founding story and support contact details are marked placeholders awaiting your content.
+This storefront is connected to **Supabase** (see "Database" below) when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set; without them it falls back to the original browser-only demo. In that demo mode there is **no backend**: sign-in (mobile OTP code `123456`, any email and password), payment, order processing, delivery tracking steps and the admin dashboard are simulated in the browser, and the admin has no authentication. Stock decrements when an order is placed and admin edits (products, stock, coupons, returns, reviews, order status) show up on the storefront immediately, but only in the same browser. Replace `store.tsx` with calls to a real API (auth, inventory, payments, orders) to go live. Legal and policy text, the founding story and support contact details are marked placeholders awaiting your content.
+
+
+## Administrator access (server-verified)
+
+A customer account is never an administrator. The dashboard at `#/admin` is reachable only with a signed, HttpOnly session cookie issued by a Vercel serverless function after a password check on the server. Nothing in localStorage, the URL, or the customer login can grant it, and the dashboard code is not downloaded until the server confirms the session. Default is deny: a missing or failing check, unreachable API, or missing configuration all show the sign-in page.
+
+- Sign in at **`/#/admin/login`** (not linked from the customer site).
+- API (`api/admin/`): `POST /api/admin/login`, `GET /api/admin/session`, `POST /api/admin/logout`. Every future admin endpoint must start with `const cfg = requireAdmin(req, res); if (!cfg) return;` (`api/_lib/adminAuth.ts`).
+- Password: scrypt hash, constant-time comparison, same work done for a wrong email. Session: HMAC-SHA256 signed token, 8 h absolute expiry, `HttpOnly; SameSite=Strict; Path=/api/admin` (+ `Secure` on HTTPS), cleared on sign-out. Login/logout reject cross-origin and non-JSON requests; login is throttled (8 attempts / 15 min per IP, best effort per warm instance).
+
+### Configure (outside the source code)
+
+1. `npm run admin:hash` — type a password (12+ chars) into your own terminal; it prints three values.
+2. Vercel → Project → Settings → Environment Variables (Production/Preview): `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `ADMIN_SESSION_SECRET`. Never prefix with `VITE_`; never commit them. Redeploy after adding.
+3. Locally, put the same three in `.env.local` (git-ignored); `npm run dev` serves `/api/admin/*` through a dev-only middleware (`vite.config.ts`).
+4. To sign every admin out at once, change `ADMIN_SESSION_SECRET`. To change the password, regenerate the hash.
+
+### Limitations
+
+- The dashboard's *data* (products, stock, orders, coupons, edits) still lives in each visitor's browser `localStorage`; it is demonstration data, not centrally secured. Server-side protection covers access to the interface, not that data. A real store needs a database behind admin endpoints that use `requireAdmin`.
+- One administrator account. The login throttle is in-memory per serverless instance; use Vercel Firewall/rate limiting for stronger protection. Sign-out clears the cookie but a copied token stays valid until it expires (max 8 h) or the secret is rotated.
+
+
+## Database (Supabase)
+
+Project `plutonic` (ap-south-1). Schema and policies were applied as migrations `plutonic_core_schema` and `restock_on_cancel`.
+
+- **Tables** (all with row-level security): `products` (public read of active items), `coupons` (no client access), `profiles`, `addresses`, `wishlist` (own rows only), `orders`, `returns` (own rows read-only), `reviews` (public read of Published; signed-in users insert Pending).
+- **Customer sign-in:** Supabase Auth, email + password. Mobile OTP is demo-only and is hidden when the database is connected. Email confirmation follows your Supabase Auth settings.
+- **Orders** are created only by the `place_order` database function, which recomputes prices, coupon discount, shipping and stock from the database and decrements stock atomically. Browsers cannot insert or edit orders, products or coupons. **Placing an order requires a signed-in account** (checkout redirects visitors to log in or sign up and returns them with their bag; the database also refuses orders from anonymous callers). Guests can still look up an existing order with order number + email (`track_order`). Payment is still simulated.
+- **Admin dashboard data** (every order, returns, reviews, coupons, all products) is read and written only through `/api/admin/data` and `/api/admin/mutate`, which require the administrator session described above and use the **service-role key on the server**.
+- No database role or "admin" flag exists that a customer account could be given.
+
+### Environment variables
+
+| Variable | Where | Secret? |
+|---|---|---|
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | browser + Vercel | No, public by design (RLS protects the data) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Vercel + `.env.local` only | **Yes**, server-only; never prefix with `VITE_` |
+| `SUPABASE_URL` (optional) | server | No; defaults to `VITE_SUPABASE_URL` |
+
+Copy the service-role key from Supabase → Project Settings → API. Without it the admin dashboard shows a "database not configured" banner and saves nothing.
+
+### Limitations
+
+- Products edited in the admin overwrite the whole product record; an admin edit made at the same moment as a customer order could overwrite that order's stock change.
+- Admin image uploads are stored inside the product record as data URLs. Move them to Supabase Storage before adding many photos.
+- Rating averages and review counts on products are static numbers from the catalogue, not computed from reviews.
+- No email is sent for orders, and payment is simulated.
+
+## REST API for web and future mobile apps
+
+The reusable backend is documented in [API.md](API.md): versioned endpoints under `/api/v1/` (catalogue, carts, wishlist, addresses, orders, returns, reviews, Cashfree payments) that share one Supabase database and one set of accounts with the web storefront, so a Flutter app can connect later without a second backend.
+
+### Cancelling orders (admin)
+
+In the dashboard's Orders list, **Cancel…** opens a dialog to cancel the **whole order** or **one item** (with a reason and optional note). It works until the order is delivered; stock is returned immediately, and cancelling the last open item cancels the whole order. Refunds are only *recorded* (`refundDue` on the order, shown to the admin and the customer): online-paid orders owe the item price minus its share of any coupon discount (the full total, including shipping, when the whole order is cancelled); pay-on-delivery orders owe nothing. Sending the money back still has to be done by an administrator in Cashfree/your bank; there is no automatic refund yet. Rules live in `src/site/orderCancel.ts` and are shared by the browser demo store and `/api/admin/mutate`.
+
+### Email verification codes (sign-up)
+
+Sign-up confirms the email with a **6-digit code** (Supabase Auth + `verifyOtp`), not a link. One-time dashboard setup: (1) Authentication > SMTP Settings: enable custom SMTP with a free provider (Brevo, Gmail app password, ...) because Supabase's built-in sender allows only a few emails per hour; (2) Authentication > Email Templates > "Confirm signup": paste `supabase/email-templates/confirm-signup.html` (it must contain `{{ .Token }}`); (3) keep Providers > Email > "Confirm email" ON. Resending a code and signing in with an unconfirmed email both lead to the same code screen.
+
+### Orders, returns, exchanges and refunds
+
+Customers manage everything on **Account > Orders**: each order expands to show live tracking, a Cancel button (until it ships), and Return or exchange per item once delivered (14-day window). Each item can have only **one open request**, enforced by the database (a unique index plus the `create_return()` function), so repeated or simultaneous clicks cannot create duplicates; a rejected request may be re-submitted. Exchanges must name a different size/colour that is in stock. After sending, the customer sees a confirmation and then a timeline on the item: Requested, Approved, Pickup scheduled (date and slot), Picked up, Completed, with the admin's message.
+
+In the admin dashboard, **Returns** moves a request along (approve, schedule pickup, picked up, complete, or reject with a reason); completing a return puts the item back in stock and adds a line to **Refunds**, completing an exchange swaps the stock. **Refunds** is the ledger of money owed to customers (cancelled orders/items and completed returns): send the money from Cashfree or your bank, then press Mark refunded and add the payment reference; the customer sees it as sent. The app records refunds but does not send money automatically. The dashboard refreshes itself every 20 seconds (and has a Refresh button). Rules: `src/site/returnRules.ts`, `src/site/orderCancel.ts`; schema: migrations 005 and 006.
+
+### Returns and exchanges: rules (migration 007)
+
+- **Orders page:** Account > Orders lists each order as a widget (product photos, estimated delivery date, price). Selecting one opens the order page: one combined **tracking**, the items (with Return or exchange), an itemised **bill**, shipping address and refunds. The page re-checks the server every 15 seconds, so admin approvals, pickup dates and shipping steps appear without a reload.
+- **One tracking:** after delivery, a return or exchange continues on the same order timeline (no second tracker, no "requests" widget).
+- **Exchange = size only** (same colour). An item can be exchanged **once**; after that it can only be **returned**, and after a return the customer places a new order. A rejected request does not use up the exchange. The 14 days run from delivery, or from the day a replacement was delivered.
+- **Return steps:** Requested, Approved, Pickup scheduled, Picked up, Refund issued. **Exchange steps:** Requested, Approved, Pickup scheduled, Picked up, then the replacement has its own live steps: Replacement packed (stock swaps here), shipped, out for delivery, delivered.
+- `VITE_FORCE_DEMO=1` runs the browser-only demo store even when Supabase keys are present (useful for testing).
+
+### One tracker
+
+Tracking is drawn by **one component**, `src/site/Tracker.tsx`, used on the order page and the public tracking page. What it shows comes from one central config, `src/site/journeys.ts` (`buildJourney`): the **delivery** journey until a return or exchange is requested, then the **return** or **exchange** journey replaces it in the same component (title, status, steps, progress). The exchange journey includes the replacement shipment (packed, shipped, out for delivery, delivered), so there is never a separate delivery tracker for the replacement. Approval and pickup are steps, not trackers. Past events stay in the database (`returns.data.history`) but only the current journey is displayed. An order can have only **one return/exchange in progress at a time**, so there is never more than one journey to follow (no switcher).
+
+### Autonomous fulfilment (automation)
+
+The shop can run itself. `server/automation/engine.ts` `tick()` is idempotent and does, in order: (1) approves return/exchange requests that pass your rules and books a pickup for tomorrow 9 am to 1 pm, flagging the rest for a person; (2) books a courier for every paid or cash-on-delivery order and marks it Packed; (3) books pickups and replacement parcels; (4) applies courier updates (Shipped, Out for delivery, Delivered, picked up, received at warehouse) to orders, returns and exchanges, swaps stock, and pays return refunds through Cashfree when the item reaches the warehouse. Everything it does is written to the log on the admin **Automation** page, where you can also switch each part off and set the rules (item value limit, requests per 90 days; "Faulty or damaged" and cash-on-delivery refunds always wait for a person). Customers watch it happen on the same single tracker.
+
+- **Courier adapter:** `server/courier/index.ts` defines the interface (`book`, plus `parseWebhook` for couriers that push updates or `poll` for ones you query). `COURIER=simulator` is a pretend courier (`SIM_STEP_SECONDS` per step) so the whole flow can be tested today. For Shadowfax or Blue Dart, add one adapter file and enable it in `activeCourier()`; point the courier's webhook at `/api/v1/couriers/<name>/webhook`.
+- **What runs it:** the dev server ticks every few seconds; a signed-in customer's browser also calls `POST /api/v1/automation/kick` (needs their sign-in token) right after an order or a request. In production add a scheduler that calls `POST /api/v1/automation/tick` every minute with the header `x-automation-secret: <AUTOMATION_SECRET>` (the endpoint refuses to run in production without that secret set): Vercel Cron on a plan that allows per-minute crons, or Supabase `pg_cron` with `pg_net`.
+- **Limits:** the Cashfree refund call and any real courier are untested until you add credentials; cash-on-delivery refunds, failed deliveries (RTO) and packing in a real warehouse still need a person. Migration `009_automation.sql` adds the `shipments` and `automation_log` tables. Migration `010_audit_fixes.sql` (run it once in the SQL editor) adds: customer cancel only before shipping, one use per customer for coupons (editable per coupon), a cap of 3 open cash-on-delivery orders per customer, refunds for payments that arrive after an order was closed, race-safe admin writes, a database-backed rate limiter and a backfill of missing refund records.
+- **Refunds:** the automation now also pays refunds for cancelled orders, retries failed ones every minute, never refunds more than the customer paid, and claims each refund before paying so it cannot be paid twice. An exchange whose size sells out after pickup is turned into a refund automatically. Open requests with no movement for 24 hours are flagged in the Automation log; an approved request nobody scheduled gets tomorrow's pickup after 15 minutes.
+
+## Scaling and big sales
+
+See [SCALING.md](SCALING.md) for what was measured, how the shop is built to hold under a rush, the pre-sale checklist and the honest limits. Migration `011_scale.sql` (safe order retries, automation lease, indexes) must be run once in the Supabase SQL editor.

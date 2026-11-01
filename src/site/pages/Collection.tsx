@@ -24,17 +24,17 @@ export default function Collection({ gender }: { gender: Gender }) {
           <div className="pl-wrap camp-copy"><span className="lbl">Men · Season 01</span><h1>Weight where<br />it matters.</h1><p>Heavyweight jersey, firm compression and joggers cut like trousers. Built to be worn hard and look composed.</p></div>
         </section>
       ) : (
-        <section className="pl-wrap camp camp--women">
+        <section className="camp-wrap sec--dark"><div className="pl-wrap camp camp--women">
           <div className="camp-copy">
             <span className="lbl muted">Women · Season 01</span><h1>Line,<br />length,<br />ease.</h1>
             <p className="muted">Second-skin knits that hold without squeezing, and layers that leave the studio with you.</p>
             <div className="row-gap"><Link className="btn btn--dark" to="/shop?g=women">Shop the edit</Link><a className="btn btn--ghost" href="#bras" onClick={(e) => { e.preventDefault(); document.getElementById('bras')?.scrollIntoView({ behavior: 'smooth' }); }}>Find your bra</a></div>
           </div>
           <div className="camp-art"><div className="ph" style={{ minHeight: 640, background: '#6B675F' }}><img src="/images/banners/women-campaign-milan.webp" alt="Woman in a pale blue coat in a stone square" fetchPriority="high" decoding="async" /></div></div>
-        </section>
+        </div></section>
       )}
 
-      <nav className="rail" aria-label={`${men ? "Men's" : "Women's"} categories`}><div className="pl-wrap rail-in">
+      <nav className={'rail' + (men ? '' : ' sec--dark')} aria-label={`${men ? "Men's" : "Women's"} categories`}><div className="pl-wrap rail-in">
         <Link className="lbl" to={`/shop?g=${gender}`}>All</Link>
         {CATEGORIES[gender].map((c) => <Link key={c} className="lbl" to={`/shop?g=${gender}&cat=${encodeURIComponent(c)}`}>{c}</Link>)}
       </div></nav>

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Minus, Plus, X, ZoomIn } from 'lucide-react';
+import { Heart, Minus, Plus, X, ZoomIn } from 'lucide-react';
 import { discountPercent, inr, RETURN_WINDOW_DAYS, sizeStock, FREE_SHIPPING_ABOVE, type Product as P } from '../catalog';
 import { go, Link, type Route } from '../router';
 import { useStore } from '../store';
 import { Crumbs, Photo, PriceTag, ProductCard, Stars, WishButton } from '../ui';
+import { wkey } from '../wishlist';
 
 const SAMPLE_REVIEWS = [
   { name: 'Aarav M.', size: 'M', text: 'Holds its shape after washing and feels substantial without being heavy. Fits as described.', fit: 'True to size', rating: 5 },
@@ -42,13 +43,16 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
   const [guide, setGuide] = useState(false);
   const [error, setError] = useState('');
   const [sticky, setSticky] = useState(false);
+  const [added, setAdded] = useState(false);
+  const { isWishedVariant, toggleWish, notifyMe, notified } = useStore();
   const buyRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const shots = Math.max(p.shots.length, p.images.length, 1);
   const colour = p.colours.find((c) => c.id === colourId)!;
   const left = size ? sizeStock(p, colourId, size) : 0;
   const inBag = size ? cartHas(`${p.id}|${colourId}|${size}`) : 0;
-  const stockText = !size ? 'Select a size' : left <= 0 ? 'Sold out in this size' : left <= 3 ? `Only ${left} left in ${size}` : 'In stock · ready to ship';
+  const savedHere = !!size && isWishedVariant(p.id, colourId, size);
+  const stockText = !size ? 'Select a size' : left <= 0 ? `Out of stock in size ${size}` : left <= 3 ? `Only ${left} left in ${size}` : 'In stock · ready to ship';
   const gallery = useMemo(() => Array.from({ length: shots }, (_, i) => i), [shots]);
 
   useEffect(() => {
@@ -59,9 +63,10 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
 
   const add = () => {
     if (!size) { setError('Please choose a size.'); return false; }
+    if (left <= 0) { setError(`Size ${size} is out of stock in ${colour.name}.`); return false; }
     const r = addToCart(p, colourId, size, qty);
     if (!r.ok) { setError(r.message); return false; }
-    setError(''); say(r.message); return true;
+    setError(''); say(`${p.name} · ${colour.name} · ${size}${qty > 1 ? ' × ' + qty : ''} added to your bag`); setAdded(true); window.setTimeout(() => setAdded(false), 1600); return true;
   };
   const checkPin = () => {
     if (!/^[1-8]\d{5}$/.test(pin)) { setPinMsg('Enter a valid 6-digit PIN code.'); return; }
@@ -78,16 +83,16 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
       <div className="pl-wrap"><Crumbs items={[{ label: 'Home', to: '/' }, { label: p.gender === 'men' ? 'Men' : 'Women', to: '/' + p.gender }, { label: p.category, to: `/shop?g=${p.gender}&cat=${encodeURIComponent(p.category)}` }, { label: p.name }]} /></div>
       <div className="pl-wrap pdp-grid">
         <div className="gal">
-          <div className="gal-thumbs" role="tablist" aria-label="Product views">{gallery.map((i) => <button key={i} type="button" role="tab" aria-selected={shot === i} className={shot === i ? 'on' : ''} onClick={() => { setShot(i); stripRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' }); }} aria-label={`View ${i + 1}: ${p.shots[i] ?? 'photograph'}`}><Photo p={p} index={i} ratio="4 / 5" /></button>)}</div>
+          <div className="gal-thumbs" role="tablist" aria-label="Product views">{gallery.map((i) => <button key={i} type="button" role="tab" aria-selected={shot === i} className={shot === i ? 'on' : ''} onClick={() => { setShot(i); stripRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' }); }} aria-label={`View ${i + 1}: ${p.shots[i] ?? 'photograph'}`}><Photo p={p} index={i} ratio="4 / 5" colourId={colourId} /></button>)}</div>
           <div className="gal-main">
             <div ref={stripRef} className="gal-strip" onScroll={(e) => { const el = e.currentTarget; setShot(Math.round(el.scrollLeft / el.clientWidth)); }}>
               {gallery.map((i) => (
                 <div key={i} className={'gal-slide' + (zoom && shot === i ? ' zoomed' : '')} onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setPos(`${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`); }} style={zoom && shot === i ? ({ ['--zoom-pos' as string]: pos } as React.CSSProperties) : undefined}>
-                  <Photo p={p} index={i} ratio="4 / 5" priority={i === 0} />
+                  <Photo p={p} index={i} ratio="4 / 5" priority={i === 0} colourId={colourId} />
                 </div>
               ))}
             </div>
-            <div className="gal-bar"><span className="lbl">{p.shots[shot] ?? 'Packshot'}</span><span className="lbl">{String(shot + 1).padStart(2, '0')} / {String(shots).padStart(2, '0')}</span>
+            <div className="gal-bar"><span className="lbl">{p.images[shot] && (!p.imageColour || p.imageColour === colourId) ? (p.shots[shot] ?? 'Photograph') : 'Illustrated preview · photography coming soon'}</span><span className="lbl">{String(shot + 1).padStart(2, '0')} / {String(shots).padStart(2, '0')}</span>
               <button type="button" className="lbl ulink gal-zoom" onClick={() => setZoom((z) => !z)} aria-pressed={zoom}><ZoomIn size={14} aria-hidden="true" /> {zoom ? 'Zoom out' : 'Zoom'}</button></div>
           </div>
         </div>
@@ -100,19 +105,21 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
           <span className="muted small">Inclusive of all taxes{discountPercent(p) ? ` · You save ${inr(p.originalPrice - p.price)}` : ''} · Demonstration pricing</span>
 
           <div className="opt"><span className="lbl">Colour · <b>{colour.name}</b></span>
-            <div className="swatches" role="radiogroup" aria-label="Colour">{p.colours.map((c) => <button key={c.id} type="button" role="radio" aria-checked={c.id === colourId} aria-label={c.name} className={c.id === colourId ? 'on' : ''} style={{ ['--sw' as string]: c.hex } as React.CSSProperties} onClick={() => { setColour(c.id); setSize(''); setError(''); }} />)}</div></div>
+            <div className="swatches" role="radiogroup" aria-label="Colour">{p.colours.map((c) => <button key={c.id} type="button" role="radio" aria-checked={c.id === colourId} aria-label={c.name} className={c.id === colourId ? 'on' : ''} style={{ ['--sw' as string]: c.hex } as React.CSSProperties} onClick={() => { setColour(c.id); setError(''); }} />)}</div></div>
 
           <div className="opt"><div className="opt-head"><span className="lbl">Size</span><button type="button" className="lbl ulink" onClick={() => setGuide(true)}>Size guide</button></div>
-            <div className="sizes" role="radiogroup" aria-label="Size">{p.sizes.map((s) => { const n = sizeStock(p, colourId, s); return <button key={s} type="button" role="radio" aria-checked={size === s} disabled={n <= 0} className={size === s ? 'on' : ''} onClick={() => { setSize(s); setError(''); setQty(1); }}>{s}{n <= 0 && <span className="sr"> sold out</span>}</button>; })}</div>
-            <span className={'stock' + (size && left > 0 && left <= 3 ? ' low' : '')} role="status">{stockText}{inBag > 0 ? ` · ${inBag} in your bag` : ''}</span></div>
+            <div className="sizes" role="radiogroup" aria-label="Size">{p.sizes.map((s) => { const n = sizeStock(p, colourId, s); return <button key={s} type="button" role="radio" aria-checked={size === s} className={(size === s ? 'on' : '') + (n <= 0 ? ' sold' : '')} title={n <= 0 ? 'Out of stock' : undefined} onClick={() => { setSize(s); setError(''); setQty(1); }}>{s}{n <= 0 && <span className="sr"> out of stock</span>}</button>; })}</div>
+            <span className={'stock' + (size && left > 0 && left <= 3 ? ' low' : '') + (size && left <= 0 ? ' out' : '')} role="status">{stockText}{inBag > 0 ? ` · ${inBag} in your bag` : ''}</span></div>
 
           <div className="buy-actions" ref={buyRef}>
-            <div className="qty" role="group" aria-label="Quantity"><button type="button" aria-label="Decrease quantity" onClick={() => setQty(Math.max(1, qty - 1))}><Minus size={14} /></button><span>{qty}</span><button type="button" aria-label="Increase quantity" onClick={() => setQty(Math.min(Math.max(left, 1), qty + 1))}><Plus size={14} /></button></div>
-            <button type="button" className="btn btn--dark btn--wide" onClick={add}>{size && left <= 0 ? 'Sold out' : 'Add to bag'}</button>
-            <WishButton id={p.id} name={p.name} />
+            <div className="qty" role="group" aria-label="Quantity" style={size && left <= 0 ? { display: 'none' } : undefined}><button type="button" aria-label="Decrease quantity" onClick={() => setQty(Math.max(1, qty - 1))}><Minus size={14} /></button><span>{qty}</span><button type="button" aria-label="Increase quantity" onClick={() => setQty(Math.min(Math.max(left, 1), qty + 1))}><Plus size={14} /></button></div>
+            {size && left <= 0
+              ? <button type="button" className="btn btn--dark btn--wide" disabled={notified.includes(p.id)} onClick={() => notifyMe(p.id)}>{notified.includes(p.id) ? 'We’ll notify you ✓' : 'Notify me'}</button>
+              : <button type="button" className={'btn btn--dark btn--wide' + (added ? ' is-added' : '')} onClick={add}>{added ? 'Added ✓' : 'Add to bag'}</button>}
           </div>
-          {error && <p className="err" role="alert">{error}</p>}
-          <button type="button" className="btn btn--ghost btn--block" onClick={() => { if (add()) go('/checkout'); }}>Buy now</button>
+          {error && !(size && left <= 0 && !/wishlist/.test(error)) && <p className="err" role="alert">{error}</p>}
+          {!(size && left <= 0) && <button type="button" className="btn btn--ghost btn--block" onClick={() => { if (add()) go('/checkout'); }}>Buy now</button>}
+          <button type="button" className={'btn btn--ghost btn--block wish-btn' + (savedHere ? ' on' : '')} aria-pressed={savedHere} onClick={() => { if (!size) { setError('Please choose a size to save it to your wishlist.'); return; } setError(''); toggleWish(wkey(p.id, colourId, size)); say(savedHere ? 'Removed from your wishlist' : `Saved to your wishlist · ${colour.name} · ${size}`); }}><Heart size={16} strokeWidth={1.5} fill={savedHere ? 'currentColor' : 'none'} aria-hidden="true" />{savedHere ? 'Saved to wishlist' : 'Add to wishlist'}</button>
 
           <div className="delivery"><span className="lbl">Delivery to</span>
             <div className="field-row"><input inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="6-digit PIN code" aria-label="PIN code" /><button type="button" className="btn btn--ghost" onClick={checkPin}>Check</button></div>

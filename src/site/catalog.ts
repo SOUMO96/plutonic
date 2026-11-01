@@ -26,6 +26,8 @@ export type Product = {
   fit: string;
   /** Local image paths. Empty → the design's tonal placeholder is shown. */
   images: string[];
+  /** Colour the photographs show; other colours fall back to the illustration. */
+  imageColour?: string;
   /** Caption of the intended photograph for each placeholder slot. */
   shots: string[];
   /** Placeholder tone. */
@@ -94,7 +96,7 @@ export const baseProducts: Product[] = [
     detail: '240 gsm cotton', description: 'A dense, structured tee that sits clean on the shoulder and keeps its shape wash after wash. Cut for the gym, finished for the street.',
     features: ['240 gsm combed cotton jersey', 'Ribbed collar with bound neck tape', 'Boxy, slightly cropped body', 'Tonal woven label, no logos'],
     fabric: '100% combed cotton, 240 gsm. Machine wash cold.', fit: 'Regular fit, true to size. Model is 185 cm and wears L.',
-    images: [MEN + 'meridian-heavyweight-tee-front.webp'], shots: ['Packshot · front', 'Packshot · back', 'Detail · collar rib and stitching', 'Detail · fabric, raking light'],
+    images: [MEN + 'meridian-heavyweight-tee-front.webp'], imageColour: 'chalk', shots: ['Packshot · front', 'Packshot · back', 'Detail · collar rib and stitching', 'Detail · fabric, raking light'],
     tone: '#DCD7CE', originalPrice: 1790, price: 1490, colourIds: ['chalk', 'onyx', 'stone'], rating: 4.7, reviewCount: 128, isNew: false, bestseller: true,
   }),
   make({
