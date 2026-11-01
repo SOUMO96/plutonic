@@ -353,3 +353,84 @@
 @media (max-width: 640px) {
   .pl main .rating, .pl main .opt-head .ulink, .pl main .crumbs a, .pl main .sec-head > a, .pl .collection-link, .pl main .lbl.ulink { display: inline-flex; align-items: center; min-height: 44px; }
 }
+
+/* Phone header: account and wishlist stay in the bar (they used to be hidden and only reachable through the menu) */
+@media (max-width: 900px) {
+  .hdr .hdr-hide { display: inline-flex; }
+  .hdr-actions { gap: 0; } .hdr-actions .ico { width: 40px; height: 44px; }
+  .hdr-in { gap: 4px; }
+}
+@media (max-width: 380px) {
+  .hdr-actions .ico { width: 36px; } .hdr-logo img { height: 38px; } .hdr .hdr-burger { width: 40px; }
+  .hdr-in { grid-template-columns: 40px 1fr auto; }
+}
+
+/* ───────── Phone polish: calm, spaced, one idea per screen ───────── */
+@media (max-width: 900px) {
+  /* hero: ONE full-bleed photograph with the words resting on a soft shade (the two photos used to be stacked edge to edge with the headline across a face) */
+  .hero { display: block; min-height: 0; height: calc(100svh - 112px); max-height: 760px; min-height: 520px; }
+  .hero-pane--women { display: none; }
+  .hero-pane--men { position: absolute; inset: 0; }
+  .hero-pane--men img { object-position: 50% 12%; filter: saturate(.75) brightness(.82); }
+  .hero-shade { background: linear-gradient(180deg, rgba(9,9,9,.35) 0%, rgba(9,9,9,0) 28%, rgba(9,9,9,.55) 62%, rgba(9,9,9,.94) 100%); }
+  .hero-tag { display: none; }
+  .hero-copy { padding-bottom: 36px; gap: 14px; }
+  .hero-copy h1 { font-size: clamp(38px, 10.5vw, 48px); line-height: 1.04; }
+  .hero-copy p { font-size: 15px; line-height: 1.6; max-width: 340px; color: #DCD7CE; }
+  .hero-copy .row-gap { gap: 10px; flex-wrap: nowrap; } .hero-copy .row-gap .btn { flex: 1; min-width: 0; padding-left: 8px; padding-right: 8px; justify-content: center; }
+}
+@media (max-width: 640px) {
+  /* product cards: name on its own lines, price underneath, nothing squeezed side by side */
+  .card { gap: 10px; }
+  .card-meta { gap: 6px; }
+  .card-top { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .card-n { font-size: 14px; line-height: 1.35; }
+  .price { gap: 4px 8px; font-size: 14px; } .price s { font-size: 12px; } .price em { font-size: 11.5px; flex-basis: 100%; }
+  .card-d { font-size: 12.5px; line-height: 1.45; }
+  .ph-cap { font-size: 9.5px; letter-spacing: .14em; left: 12px; bottom: 12px; right: 12px; white-space: normal; line-height: 1.4; }
+  .grid--4, .grid--3.grid--list { gap: 32px 14px; }
+
+  /* the segmented filters sit in one row */
+  .sec-head { flex-direction: column; align-items: flex-start; gap: 18px; }
+  .seg { display: flex; width: 100%; flex-direction: row; } .seg button { flex: 1; min-height: 42px; padding: 0 8px; }
+
+  /* the three collections: a swipeable row with the next card peeking in, not two plus a lonely one */
+  .grid--edits { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -20px; padding: 0 20px 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .grid--edits::-webkit-scrollbar { display: none; }
+  .grid--edits .edit { flex: 0 0 72%; scroll-snap-align: start; }
+
+  /* more air between the story sections */
+  .sec { padding-top: 64px; padding-bottom: 64px; }
+
+  /* footer */
+  .ftr-in { gap: 32px; padding-top: 48px; } .ftr-cols { gap: 28px 20px; } .ftr-cols a, .ftr-cols .linkbtn { min-height: 40px; text-align: left; white-space: normal; }
+  .ftr-cols .linkbtn { padding: 0; justify-content: flex-start; }
+  .ftr-base { flex-direction: column; gap: 6px; align-items: flex-start; }
+
+  /* product page picture bar: the counter never breaks into pieces */
+  .gal-bar { gap: 12px; align-items: flex-start; } .gal-bar .lbl:last-child { white-space: nowrap; flex: none; } .gal-bar .lbl:first-child { font-size: 10px; letter-spacing: .16em; line-height: 1.5; }
+}
+@media (max-width: 640px) {
+  .sec-head > .seg { flex-direction: row; display: flex; width: 100%; }
+  .grid--edits { scroll-padding-left: 20px; }
+  .card .ph-cap { display: none; }          /* the "Illustration · front" caption crowds small cards; it stays on the product page */
+}
+@media (max-width: 640px) { .gal-bar .lbl:nth-child(2) { white-space: nowrap; flex: none; } }
+
+/* small thumbnails never carry the "Illustration · front" caption */
+.item-thumb .ph-cap, .owidget-ph .ph-cap, .ret-thumb .ph-cap, .cart-item .ph-cap, [class*='thumb'] .ph-cap, .co-items .ph-cap { display: none; }
+@media (max-width: 900px) {
+  /* account tabs: one calm row that scrolls sideways instead of wrapping onto a second line */
+  .dash-nav nav { flex-wrap: nowrap; overflow-x: auto; gap: 4px 22px; scrollbar-width: none; margin-right: -20px; padding-right: 20px; }
+  .dash-nav nav::-webkit-scrollbar { display: none; }
+  .dash-nav nav a, .dash-nav nav .linkbtn { white-space: nowrap; flex: none; }
+}
+@media (max-width: 640px) {
+  .owidget { grid-template-columns: 60px 1fr; gap: 14px; align-items: start; } .owidget-ph { width: 60px; }
+  .owidget-side { grid-column: 2; flex-direction: row; justify-content: space-between; align-items: center; width: 100%; }
+}
+@media (max-width: 640px) {
+  .owidget { grid-template-columns: 60px minmax(0, 1fr); }
+  .owidget-side { width: auto; justify-self: stretch; min-width: 0; }
+}
+@media (max-width: 900px) { .dash { grid-template-columns: minmax(0, 1fr); } .dash-nav, .dash-main { min-width: 0; } }

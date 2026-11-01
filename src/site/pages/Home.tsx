@@ -89,7 +89,7 @@ export default function Home() {
       <section className="sec sec--ivory">
         <div className="pl-wrap stack-40">
           <div><span className="lbl muted">Featured collections</span><h2 className="h2">Three edits, one discipline</h2></div>
-          <div className="grid grid--3">
+          <div className="grid grid--3 grid--edits">
             {EDITS.map((e) => (
               <Link key={e.title} to={e.to} className="edit">
                 <div className="ph" style={{ aspectRatio: '4 / 5', background: e.art.bg }}><GarmentArt kind={e.art.kind} colour={e.art.colour} /><span className="ph-cap" style={{ color: '#85837E' }}>{e.cap}</span></div>

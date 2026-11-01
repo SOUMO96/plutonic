@@ -72,7 +72,7 @@ add('GET', '/reviews/recent', 'none', async ({ db, url }) => {
 // ------------------------------------------------------------------ checkout, orders (guest allowed on checkout/track)
 add('POST', '/orders', 'required', async ({ db, body }) => {
   const b = await body();
-  const order = must(await db.rpc('place_order', { p: { items: b.items, coupon: b.coupon, delivery: b.delivery, payment: b.payment, address: b.address, email: b.email, mobile: b.mobile } }));
+  const order = must(await db.rpc('place_order', { p: { items: b.items, coupon: b.coupon, delivery: b.delivery, payment: b.payment, address: b.address, email: b.email, mobile: b.mobile, idempotencyKey: typeof b.idempotencyKey === 'string' ? b.idempotencyKey.slice(0, 80) : undefined } }));   // same key = same order, so a retry can never double-order
   return created(order);
 }, { bucket: 'checkout', max: 10 });
 add('GET', '/orders/track', 'none', async ({ db, url }) => {
