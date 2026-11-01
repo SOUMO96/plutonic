@@ -1,5 +1,5 @@
 import { ORDER_STEPS, type Order, type Refund, type ReturnReq } from './store';
-import { flowFor, isOpen, stepLabel } from './returnRules';
+import { flowFor, stepLabel } from './returnRules';
 import { inr } from './catalog';
 
 /**
@@ -34,11 +34,13 @@ const when = (t: number) => new Date(t).toLocaleString('en-IN', { day: 'numeric'
 const longDay = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
 const lastAt = (r: ReturnReq) => r.history?.[r.history.length - 1]?.at ?? r.createdAt;
 
-/** Which request the tracker follows: the most recently updated open one, else the latest finished one. */
+/**
+ * Which request the tracker follows: the one with the most recent activity.
+ * (Not "any open one": an old, forgotten request must never take over from the journey that just moved.)
+ */
 export function pickRequest(reqs: ReturnReq[], focusId?: string): ReturnReq | undefined {
   if (focusId) { const f = reqs.find((r) => r.id === focusId); if (f) return f; }
-  const open = reqs.filter(isOpen).sort((a, b) => lastAt(b) - lastAt(a))[0];
-  return open ?? [...reqs].sort((a, b) => lastAt(b) - lastAt(a))[0];
+  return [...reqs].sort((a, b) => lastAt(b) - lastAt(a))[0];
 }
 
 export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], focusId?: string): Journey {
