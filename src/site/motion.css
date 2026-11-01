@@ -209,3 +209,7 @@
 .wl-pick select { height: 44px; width: 100%; min-width: 0; border: 1px solid var(--line2, rgba(9,9,9,.3)); background: #fff; padding: 0 10px; font: 400 14px Inter, sans-serif; }
 .wishpick { max-width: 460px; }
 @media (max-width: 640px) { .wl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 12px; } .wl-title { flex-direction: column; gap: 2px; } .wl-variant { font-size: 12px; } }
+
+/* Wishlist page: breathing room above the footer */
+.wish-page { padding-bottom: clamp(72px, 10vw, 140px); }
+.wl-title b { white-space: nowrap; flex: none; } .wl-title span { min-width: 0; }
