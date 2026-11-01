@@ -28,7 +28,7 @@ Flutter: `supabase_flutter` → `Supabase.instance.client.auth.signInWithPasswor
 | `GET /categories` | – | Category list per gender |
 | `GET /coupons/:code` | – | Look up an active coupon (no listing) |
 | `GET /reviews?productId=` | – | Published reviews |
-| `POST /orders` | yes | **Checkout.** Body: `items[{productId,colourId,size,qty}]`, `coupon`, `delivery` (standard/express), `payment` (upi/card/netbanking/cod), `address`, `email`, `mobile`. Prices, discount, shipping and stock are computed on the server; any client prices are ignored. Returns the order |
+| `POST /orders` | yes | **Checkout.** Body: `items[{productId,colourId,size,qty}]`, `coupon`, `delivery` (standard/express), `payment` (upi/card/netbanking/cod), `address`, `email`, `mobile`. Prices, discount, shipping and stock are computed on the server; any client prices are ignored. Returns the order (send `idempotencyKey`, a unique string per checkout attempt, so a retry returns the same order) |
 | `GET /orders/track?id=&email=` | – | Guest order lookup (id + email must match) |
 | `GET /orders`, `GET /orders/:id` | yes | The caller's order history / one order (tracking steps are in `step` and `history`) |
 | `POST /orders/:id/cancel` | yes | Cancel before it ships, i.e. while confirmed or packed (stock is returned; refund is paid automatically) |
