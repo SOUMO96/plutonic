@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { inr } from '../catalog';
 import { MyOrders } from './MyOrders';
+import { parseW } from '../wishlist';
 import { go, Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Address } from '../store';
 import { Photo } from '../ui';
@@ -191,7 +192,7 @@ function Dashboard({ route }: { route: Route }) {
   const tab = TABS.some(([k]) => k === route.query.get('tab')) ? route.query.get('tab')! : 'orders';
   const [editing, setEditing] = useState<Address | 'new' | null>(null);
   const [prof, setProf] = useState({ firstName: user!.firstName, lastName: user!.lastName, email: user!.email, mobile: user!.mobile });
-  const saved = wishlist.map((id) => product(id)).filter((p) => p && p.active);
+  const saved = [...new Set(wishlist.map((k) => parseW(k).productId))].map((id) => product(id)).filter((p) => p && p.active);
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const ov = false;   // the account has no overview page: every tab is its own page

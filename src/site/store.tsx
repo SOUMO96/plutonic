@@ -6,6 +6,7 @@ import {
 import { cancelItem as cancelItemRule, cancelWhole as cancelWholeRule, type Cancelled } from './orderCancel';
 import { applyUpdate, currentPiece, requestError, type Update } from './returnRules';
 import { isLive, supabase } from './supabase';
+import { parseW, wkey } from './wishlist';
 
 /**
  * Client-side commerce state for the demonstration storefront.
@@ -141,7 +142,15 @@ export type Store = {
   setQty: (key: string, qty: number) => void; removeLine: (key: string) => void;
   changeVariant: (key: string, colourId: string, size: string) => { ok: boolean; message: string };
   moveToWishlist: (key: string) => void;
-  wishlist: string[]; isWished: (id: string) => boolean; toggleWish: (id: string) => void;
+  /** Saved pieces, each `productId_colourId_size` (see wishlist.ts). */
+  wishlist: string[];
+  /** True if any colour/size of this product is saved. */
+  isWished: (productId: string) => boolean;
+  isWishedVariant: (productId: string, colourId: string, size: string) => boolean;
+  /** Save or remove exactly this wishlist entry. */
+  toggleWish: (key: string) => void;
+  /** Remove every saved colour/size of a product. */
+  removeWishProduct: (productId: string) => void;
   coupon: Coupon | undefined; applyCoupon: (code: string) => Promise<{ ok: boolean; message: string }>; removeCoupon: () => void;
   price: (delivery?: 'standard' | 'express', payment?: Order['payment']) => PriceBreakdown;
   placeOrder: (d: { delivery: Order['delivery']; payment: Order['payment']; address: Address; email: string; mobile: string }) => Promise<Order | { error: string }>;
@@ -339,9 +348,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const removeLine = (key: string) => setState((s) => ({ ...s, cart: s.cart.filter((l) => l.key !== key) }));
   const moveToWishlist = (key: string) => setState((s) => {
     const l = s.cart.find((x) => x.key === key); if (!l) return s;
-    return { ...s, cart: s.cart.filter((x) => x.key !== key), wishlist: s.wishlist.includes(l.productId) ? s.wishlist : [...s.wishlist, l.productId] };
+    if (supabase && uid.current) run(supabase.from('wishlist').upsert({ user_id: uid.current, product_id: wkey(l.productId, l.colourId, l.size) }));
+    return { ...s, cart: s.cart.filter((x) => x.key !== key), wishlist: s.wishlist.includes(wkey(l.productId, l.colourId, l.size)) ? s.wishlist : [...s.wishlist, wkey(l.productId, l.colourId, l.size)] };
   });
 
+  const removeWishProduct = (productId: string) => {
+    const keys = state.wishlist.filter((k) => parseW(k).productId === productId);
+    if (supabase && uid.current && keys.length) run(supabase.from('wishlist').delete().in('product_id', keys));
+    setState((s) => ({ ...s, wishlist: s.wishlist.filter((k) => parseW(k).productId !== productId) }));
+  };
   const toggleWish = (id: string) => {
     if (supabase && uid.current) {
       if (state.wishlist.includes(id)) run(supabase.from('wishlist').delete().eq('product_id', id));
@@ -661,7 +676,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Store = {
     products, allProducts, product,
     cart: state.cart, cartCount: state.cart.reduce((n, l) => n + l.qty, 0), addToCart, setQty, removeLine, changeVariant, moveToWishlist,
-    wishlist: state.wishlist, isWished: (id) => state.wishlist.includes(id), toggleWish,
+    wishlist: state.wishlist, isWished: (id) => state.wishlist.some((k) => parseW(k).productId === id), isWishedVariant: (id, colourId, size) => state.wishlist.includes(wkey(id, colourId, size)), toggleWish, removeWishProduct,
     coupon, applyCoupon, removeCoupon, price, placeOrder,
     orders: adminData?.orders ?? state.orders, advanceOrder, cancelOrder, returns: adminData?.returns ?? state.returns, refunds: adminData?.refunds ?? state.refunds, createReturn, updateReturn, markRefunded,
     reviews: adminData?.reviews ?? state.reviews, addReview, setReviewStatus,

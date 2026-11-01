@@ -197,3 +197,15 @@
 .wish-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .wish-btn.on { background: rgba(9,9,9,.06); }
 .stock.out { color: #9B2C1F; font-weight: 500; }
+
+/* Wishlist page: tidy responsive grid (the old 4-column grid made one item enormous) */
+.wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 260px)); gap: 28px 20px; margin-top: 20px; }
+.wl-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wl-photo { position: relative; } .wl-photo .ph { width: 100%; }
+.wl-x { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(242,240,235,.9); color: #090909; font-size: 20px; line-height: 1; cursor: pointer; }
+.wl-title { display: flex; justify-content: space-between; gap: 8px; color: inherit; text-decoration: none; } .wl-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-variant { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; } .wl-variant i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(9,9,9,.3); }
+.wl-pick { display: flex; flex-direction: column; gap: 8px; } .wl-pick label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.wl-pick select { height: 44px; width: 100%; min-width: 0; border: 1px solid var(--line2, rgba(9,9,9,.3)); background: #fff; padding: 0 10px; font: 400 14px Inter, sans-serif; }
+.wishpick { max-width: 460px; }
+@media (max-width: 640px) { .wl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 12px; } .wl-title { flex-direction: column; gap: 2px; } .wl-variant { font-size: 12px; } }

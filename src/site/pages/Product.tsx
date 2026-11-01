@@ -4,6 +4,7 @@ import { discountPercent, inr, RETURN_WINDOW_DAYS, sizeStock, FREE_SHIPPING_ABOV
 import { go, Link, type Route } from '../router';
 import { useStore } from '../store';
 import { Crumbs, Photo, PriceTag, ProductCard, Stars, WishButton } from '../ui';
+import { wkey } from '../wishlist';
 
 const SAMPLE_REVIEWS = [
   { name: 'Aarav M.', size: 'M', text: 'Holds its shape after washing and feels substantial without being heavy. Fits as described.', fit: 'True to size', rating: 5 },
@@ -43,13 +44,14 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
   const [error, setError] = useState('');
   const [sticky, setSticky] = useState(false);
   const [added, setAdded] = useState(false);
-  const { isWished, toggleWish, notifyMe, notified } = useStore();
+  const { isWishedVariant, toggleWish, notifyMe, notified } = useStore();
   const buyRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const shots = Math.max(p.shots.length, p.images.length, 1);
   const colour = p.colours.find((c) => c.id === colourId)!;
   const left = size ? sizeStock(p, colourId, size) : 0;
   const inBag = size ? cartHas(`${p.id}|${colourId}|${size}`) : 0;
+  const savedHere = !!size && isWishedVariant(p.id, colourId, size);
   const stockText = !size ? 'Select a size' : left <= 0 ? `Out of stock in size ${size}` : left <= 3 ? `Only ${left} left in ${size}` : 'In stock · ready to ship';
   const gallery = useMemo(() => Array.from({ length: shots }, (_, i) => i), [shots]);
 
@@ -115,8 +117,8 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
               ? <button type="button" className="btn btn--dark btn--wide" disabled={notified.includes(p.id)} onClick={() => notifyMe(p.id)}>{notified.includes(p.id) ? 'We’ll notify you ✓' : 'Notify me'}</button>
               : <button type="button" className={'btn btn--dark btn--wide' + (added ? ' is-added' : '')} onClick={add}>{added ? 'Added ✓' : 'Add to bag'}</button>}
           </div>
-          <button type="button" className={'btn btn--ghost btn--block wish-btn' + (isWished(p.id) ? ' on' : '')} aria-pressed={isWished(p.id)} onClick={() => { const was = isWished(p.id); toggleWish(p.id); say(was ? 'Removed from your wishlist' : 'Saved to your wishlist'); }}><Heart size={16} strokeWidth={1.5} fill={isWished(p.id) ? 'currentColor' : 'none'} aria-hidden="true" />{isWished(p.id) ? 'Saved to wishlist' : 'Add to wishlist'}</button>
-          {error && !(size && left <= 0) && <p className="err" role="alert">{error}</p>}
+          <button type="button" className={'btn btn--ghost btn--block wish-btn' + (savedHere ? ' on' : '')} aria-pressed={savedHere} onClick={() => { if (!size) { setError('Please choose a size to save it to your wishlist.'); return; } setError(''); toggleWish(wkey(p.id, colourId, size)); say(savedHere ? 'Removed from your wishlist' : `Saved to your wishlist · ${colour.name} · ${size}`); }}><Heart size={16} strokeWidth={1.5} fill={savedHere ? 'currentColor' : 'none'} aria-hidden="true" />{savedHere ? 'Saved to wishlist' : 'Add to wishlist'}</button>
+          {error && !(size && left <= 0 && !/wishlist/.test(error)) && <p className="err" role="alert">{error}</p>}
           {!(size && left <= 0) && <button type="button" className="btn btn--ghost btn--block" onClick={() => { if (add()) go('/checkout'); }}>Buy now</button>}
 
           <div className="delivery"><span className="lbl">Delivery to</span>

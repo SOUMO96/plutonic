@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Heart, Menu, Search, ShoppingBag, Star, User, X } from 'lucide-react';
 import { discountPercent, FREE_SHIPPING_ABOVE, inr, RETURN_WINDOW_DAYS, sizeStock, totalStock, type Product } from './catalog';
 import { go, Link, useRoute } from './router';
 import { GarmentArt, garmentFor } from './garments';
 import { useStore } from './store';
+import { wkey } from './wishlist';
 
 export const LOGO = '/plutonic-logo-transparent.svg';
 
@@ -62,14 +64,45 @@ export function PriceTag({ p }: { p: Product }) {
   );
 }
 
+/** Asks for the colour and size to save (a wishlist entry is a specific piece, not just a product). */
+function WishPicker({ p, onClose }: { p: Product; onClose: () => void }) {
+  const { toggleWish, say } = useStore();
+  const first = p.colours.find((c) => p.sizes.some((x) => sizeStock(p, c.id, x) > 0))?.id ?? p.colours[0].id;
+  const [colourId, setColour] = useState(first);
+  const [size, setSize] = useState('');
+  const [err, setErr] = useState('');
+  const colour = p.colours.find((c) => c.id === colourId) ?? p.colours[0];
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
+  const root = typeof document !== 'undefined' ? (document.querySelector('.pl') ?? document.body) : null;
+  if (!root) return null;
+  return createPortal(
+    <div className="cdlg-back" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="cdlg wishpick" role="dialog" aria-modal="true" aria-labelledby="wp-h">
+        <div className="row-between"><h2 id="wp-h" className="h3">Save to wishlist</h2><button type="button" className="linkbtn" onClick={onClose}>Close</button></div>
+        <p className="muted small">{p.name} · choose the colour and size you want to save.</p>
+        <div className="opt"><span className="lbl">Colour · <b>{colour.name}</b></span>
+          <div className="swatches" role="radiogroup" aria-label="Colour">{p.colours.map((c) => <button key={c.id} type="button" role="radio" aria-checked={c.id === colourId} aria-label={c.name} className={c.id === colourId ? 'on' : ''} style={{ ['--sw' as string]: c.hex } as React.CSSProperties} onClick={() => { setColour(c.id); setErr(''); }} />)}</div></div>
+        <div className="opt"><span className="lbl">Size</span>
+          <div className="sizes" role="radiogroup" aria-label="Size">{p.sizes.map((x) => { const n = sizeStock(p, colourId, x); return <button key={x} type="button" role="radio" aria-checked={size === x} className={(size === x ? 'on' : '') + (n <= 0 ? ' sold' : '')} title={n <= 0 ? 'Out of stock' : undefined} onClick={() => { setSize(x); setErr(''); }}>{x}</button>; })}</div>
+          {size && sizeStock(p, colourId, size) <= 0 && <span className="stock out" role="status">Out of stock in size {size}. You can still save it and we’ll let you know when it is back.</span>}</div>
+        {err && <p className="err" role="alert">{err}</p>}
+        <button type="button" className="btn btn--dark btn--block" onClick={() => { if (!size) { setErr('Please choose a size to save it.'); return; } toggleWish(wkey(p.id, colourId, size)); say(`Saved to your wishlist · ${colour.name} · ${size}`); onClose(); }}>Save to wishlist</button>
+      </div>
+    </div>, root);
+}
+
 export function WishButton({ id, name }: { id: string; name: string }) {
-  const { isWished, toggleWish, say } = useStore();
-  const on = isWished(id);
+  const { isWished, removeWishProduct, say, product } = useStore();
+  const [open, setOpen] = useState(false);
+  const on = isWished(id); const p = product(id);
   return (
-    <button type="button" className={'wish' + (on ? ' on' : '')} aria-pressed={on} aria-label={(on ? 'Remove from wishlist: ' : 'Save to wishlist: ') + name}
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWish(id); say(on ? 'Removed from wishlist' : 'Saved to wishlist'); }}>
-      <Heart size={18} strokeWidth={1.4} fill={on ? 'currentColor' : 'none'} />
-    </button>
+    <>
+      <button type="button" className={'wish' + (on ? ' on' : '')} aria-pressed={on} aria-label={(on ? 'Remove from wishlist: ' : 'Save to wishlist: ') + name}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (on) { removeWishProduct(id); say('Removed from wishlist'); } else if (p) setOpen(true); }}>
+        <Heart size={18} strokeWidth={1.4} fill={on ? 'currentColor' : 'none'} />
+      </button>
+      {open && p && <WishPicker p={p} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
