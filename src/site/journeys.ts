@@ -90,7 +90,7 @@ export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], 
   return {
     kind: req.kind, id: req.id, title: req.kind === 'exchange' ? 'Exchange' : 'Return',
     status: rejected ? 'Request declined' : req.status === 'Requested' ? 'Waiting for our response' : req.status === 'Completed' ? stepLabel(req.kind, 'Completed') : stepLabel(req.kind, cur),
-    subtitle: `${req.productName} · ${req.variant}${req.kind === 'exchange' && req.exchangeTo ? ` → size ${req.exchangeTo.size}` : ''} · Order #${o.id}`,
+    subtitle: `${req.productName} · ${req.variant}${req.kind === 'exchange' && req.exchangeTo ? ` → size ${req.exchangeTo.size}` : ''} · Order #${o.id} · Request ${req.id}`,
     steps,
     note: [req.adminNote && !rejected ? `Message from PLUTONIC: ${req.adminNote}` : '', req.status === 'Pickup scheduled' ? 'Please keep the item unworn with tags, in its packaging.' : ''].filter(Boolean).join(' ') || undefined,
   };

@@ -120,7 +120,7 @@ function ReturnCard({ r }: { r: ReturnReq }) {
   return (
     <div className="rcard">
       <div className="rcard-top">
-        <div><b>{r.kind === 'exchange' ? 'Exchange' : 'Return'} {r.id} · {r.productName}</b><span className="muted small">{r.variant}{r.qty ? ` · Qty ${r.qty}` : ''} · order #{r.orderId}{o ? ` · ${o.address.name}, ${o.address.city}` : ''}</span></div>
+        <div><b>Order #{r.orderId} · {r.kind === 'exchange' ? 'Exchange' : 'Return'} {r.id}</b><span className="muted small">{r.productName} · {r.variant}{r.qty ? ` · Qty ${r.qty}` : ''}{o ? ` · ${o.address.name}, ${o.address.city}` : ''}</span></div>
         <span className={'status' + (r.status === 'Rejected' ? ' status--bad' : r.status === 'Requested' ? ' status--info' : '')}>{r.status}</span>
       </div>
       <p className="small">Reason: <b>{r.reason}</b>{r.note ? ` · “${r.note}”` : ''}</p>

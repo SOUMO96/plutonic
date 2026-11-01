@@ -96,8 +96,8 @@ function RequestPanel({ order, index, canExchange, onClose }: { order: Order; in
 function requestNote(r: ReturnReq): string {
   const what = r.kind === 'exchange' ? 'exchange' : 'return';
   switch (r.status) {
-    case 'Requested': return `Your ${what} request was sent. Please wait for our response.`;
-    case 'Approved': return `Your ${what} was approved. We will book the pickup shortly.`;
+    case 'Requested': return `Your ${what} request ${r.id} was sent. Please wait for our response.`;
+    case 'Approved': return `Your ${what} request ${r.id} was approved. We will book the pickup shortly.`;
     case 'Pickup scheduled': return r.pickupDate ? `Pickup booked for ${longDay(r.pickupDate)}, ${r.pickupSlot ?? ''}.` : 'Pickup booked.';
     case 'Picked up': return r.kind === 'exchange' ? 'We have your item and are preparing your replacement.' : 'We have your item. Your refund is being prepared.';
     default: return 'Your replacement is on its way. Follow it in the tracking.';
