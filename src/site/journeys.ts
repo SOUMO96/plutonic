@@ -40,14 +40,6 @@ export function pickRequest(reqs: ReturnReq[], focusId?: string): ReturnReq | un
   return open ?? [...reqs].sort((a, b) => lastAt(b) - lastAt(a))[0];
 }
 
-/** Items of this order that have a request, so the single tracker can be switched between them (only when more than one). */
-export function journeyChoices(o: Order, returns: ReturnReq[]): { id: string; label: string }[] {
-  const reqs = returns.filter((r) => r.orderId === o.id);
-  const byItem = new Map<number, ReturnReq>();
-  for (const r of reqs) { const k = r.itemIndex ?? -1; const cur = byItem.get(k); if (!cur || lastAt(r) >= lastAt(cur)) byItem.set(k, r); }
-  return [...byItem.values()].map((r) => ({ id: r.id, label: `${r.kind === 'exchange' ? 'Exchange' : 'Return'} · ${r.productName}` }));
-}
-
 export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], focusId?: string): Journey {
   const reqs = returns.filter((r) => r.orderId === o.id);
   const req = o.step >= 0 ? pickRequest(reqs, focusId) : undefined;

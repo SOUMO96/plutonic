@@ -175,5 +175,3 @@
 .tracker { display: flex; flex-direction: column; gap: 6px; }
 .tracker-status { margin: 0; transition: opacity .2s ease; } .tracker-sub { margin: 0 0 12px; }
 .tracker .timeline li { transition: opacity .35s ease; }
-.tracker-pick { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.tracker-pick button { border: 1px solid var(--line2, rgba(9,9,9,.3)); background: none; color: inherit; padding: 6px 10px; font: 400 12px Inter, sans-serif; cursor: pointer; } .tracker-pick button.on { background: var(--fg, #090909); color: var(--bg, #F2F0EB); }

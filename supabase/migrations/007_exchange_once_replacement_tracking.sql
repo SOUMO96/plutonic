@@ -2,6 +2,7 @@
 --  * exchanges are size-only (same colour);
 --  * an item can be exchanged ONCE; after that it can only be returned, and after a return the customer places a new order;
 --  * a completed exchange no longer blocks a later return (only OPEN requests are unique);
+--  * only one return/exchange can be open per order;
 --  * an exchange has its own replacement shipment steps after pickup (packed, shipped, out for delivery, delivered).
 
 alter table public.returns drop constraint returns_status_check;
@@ -38,6 +39,10 @@ begin
 
   if exists (select 1 from public.returns where order_id = o.id and (data->>'itemIndex')::int = idx and status not in ('Rejected','Completed')) then
     raise exception 'A request for this item is already in progress. You can follow it on your order.';
+  end if;
+  -- only ONE return/exchange may be in progress on an order at a time (so the tracker has exactly one journey to show)
+  if exists (select 1 from public.returns where order_id = o.id and status not in ('Rejected','Completed')) then
+    raise exception 'Another request on this order is in progress. You can start a new one when it is finished.';
   end if;
   if exists (select 1 from public.returns where order_id = o.id and (data->>'itemIndex')::int = idx and status = 'Completed' and data->>'kind' = 'return') then
     raise exception 'This item has already been returned. Please place a new order.';

@@ -10,6 +10,7 @@ import type { Order, ReturnReq } from './store';
  *            > Replacement out for delivery > Completed (replacement delivered)
  *  A request can be Rejected until the piece has been picked up.
  *
+ *  Per ORDER: only one request can be open at a time (so there is only ever one journey to show).
  *  Per item: exactly one OPEN request at a time. An item can be EXCHANGED ONCE (size only, same colour);
  *  after that it can only be RETURNED; after a return the customer places a new order.
  */
@@ -95,6 +96,9 @@ export function itemState(o: Order, itemIndex: number, returns: ReturnReq[], now
   const base = { open, returned, exchanged, windowEndsAt };
   if (!it || it.cancelled) return { ...base, canReturn: false, canExchange: false };
   if (o.step !== 4) return { ...base, canReturn: false, canExchange: false };
+  // Only one return/exchange may be in progress on an order. Finish (or have it declined) before starting another.
+  const otherOpen = returns.find((r) => r.orderId === o.id && r.itemIndex !== itemIndex && isOpen(r));
+  if (otherOpen && !open) return { ...base, canReturn: false, canExchange: false, note: 'Another request on this order is in progress. You can start a new one when it is finished.' };
   if (returned) return { ...base, canReturn: false, canExchange: false, note: 'Returned. Please place a new order if you would like it again.' };
   if (open) return { ...base, canReturn: false, canExchange: false };
   if (now > windowEndsAt) return { ...base, canReturn: false, canExchange: false, note: 'Return window closed' };
@@ -107,6 +111,7 @@ export function requestError(o: Order, itemIndex: number, returns: ReturnReq[], 
   if (o.step !== 4) return 'Only delivered orders can be returned or exchanged.';
   const st = itemState(o, itemIndex, returns, now);
   if (st.open) return 'A request for this item is already in progress. You can follow it on your order.';
+  if (returns.some((r) => r.orderId === o.id && isOpen(r))) return 'Another request on this order is in progress. You can start a new one when it is finished.';
   if (st.returned) return 'This item has already been returned. Please place a new order.';
   if (!st.canReturn) return st.note ?? 'That item cannot be returned or exchanged.';
   if (kind === 'exchange' && !st.canExchange) return 'This item has already been exchanged once. It can only be returned now. After a return, please place a new order.';

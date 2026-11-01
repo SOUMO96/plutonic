@@ -4,7 +4,7 @@ import { inr, RETURN_WINDOW_DAYS, sizeStock } from '../catalog';
 import { Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Order, type ReturnReq } from '../store';
 import { currentPiece, itemState, RETURN_REASONS } from '../returnRules';
-import { buildJourney, journeyChoices } from '../journeys';
+import { buildJourney } from '../journeys';
 import { Tracker } from '../Tracker';
 import { Photo } from '../ui';
 
@@ -107,7 +107,6 @@ function requestNote(r: ReturnReq): string {
 function OrderPage({ o }: { o: Order }) {
   const { returns, refunds, cancelOrder, product } = useStore();
   const [req, setReq] = useState<number | null>(null);
-  const [focus, setFocus] = useState<string | undefined>();   // which item's journey the one tracker follows (only matters with several requests)
   const orderRefunds = refunds.filter((x) => x.orderId === o.id);
   return (
     <section className="panel opage">
@@ -115,7 +114,7 @@ function OrderPage({ o }: { o: Order }) {
       <div className="opage-head"><div><h2 className="h2">Order #{o.id}</h2><p className="muted">Placed {when(o.createdAt)} · {deliveryLine(o)}</p></div><span className={'status' + (o.step < 0 ? ' status--bad' : '')}>{statusOf(o)}</span></div>
       <div className="ocard-grid">
         <section>
-          <Tracker journey={buildJourney(o, returns, refunds, focus)} choices={journeyChoices(o, returns)} onChoose={setFocus} />
+          <Tracker journey={buildJourney(o, returns, refunds)} />
           {o.step >= 0 && o.step < 3 && <div className="row-gap"><button type="button" className="btn btn--ghost btn--sm" onClick={() => { if (window.confirm(`Cancel order #${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button><span className="muted small">You can cancel until the order ships.</span></div>}
           {o.step === 3 && <p className="muted small">This order is out for delivery, so it can no longer be cancelled. You can return or exchange items after delivery.</p>}
         </section>
