@@ -497,6 +497,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { ok: true, message: 'Request sent', request };
   };
   const refreshAdmin = useCallback(async () => {
+    if (!isLive) return;   // the browser-only demo has no server data to refresh
     try { const r = await fetch('/api/admin/data', { credentials: 'same-origin', cache: 'no-store' }); if (r.ok) setAdminData((await r.json()) as AdminData); } catch { /* keep what we have */ }
   }, []);
   const updateReturn: Store['updateReturn'] = async (id, status, u = {}) => {
