@@ -179,3 +179,11 @@
 /* The latest step reached gets a soft ring so the customer sees "you are here" */
 .tracker .timeline li.current .dotc { box-shadow: 0 0 0 4px rgba(9,9,9,.14); }
 .tracker .timeline li.current > b { font-weight: 700; }
+
+/* Admin: pickup date quick-picks */
+.pickup-pick { display: flex; flex-direction: column; gap: 8px; }
+.pickup-days { display: flex; gap: 6px; flex-wrap: wrap; }
+.pickup-days button { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; padding: 8px 10px; border: 1px solid rgba(9,9,9,.3); background: #fff; color: #090909; cursor: pointer; font: 400 12px Inter, sans-serif; }
+.pickup-days button b { font-weight: 600; } .pickup-days button:hover { border-color: #090909; }
+.pickup-days button.on { background: #090909; color: #F2F0EB; border-color: #090909; }
+.rcard-act input[type=date] { cursor: pointer; }

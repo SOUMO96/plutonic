@@ -100,6 +100,8 @@ function Bars({ data, unit = '' }: { data: [string, number][]; unit?: string }) 
 
 const fmt = (t: number) => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+/** Today and the following days as ready-made choices for scheduling a pickup. */
+const upcomingDays = (n: number) => Array.from({ length: n }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); return { iso, dow: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-IN', { weekday: 'short' }), label: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) }; });
 
 /** One return / exchange request with the actions that make sense for its current step. */
 function ReturnCard({ r }: { r: ReturnReq }) {
@@ -130,7 +132,11 @@ function ReturnCard({ r }: { r: ReturnReq }) {
       <ol className="rcard-hist">{(r.history ?? []).map((h, i) => <li key={i}><b>{stepLabel(r.kind, h.status)}</b> <span className="muted small">{fmt(h.at)}</span></li>)}</ol>
       {next.length > 0 && (
         <div className="rcard-act">
-          {next.includes('Pickup scheduled') && <div className="row-gap"><label className="small">Pickup date<input type="date" value={date} min={todayISO()} onChange={(e) => setDate(e.target.value)} /></label><label className="small">Time slot<select value={slot} onChange={(e) => setSlot(e.target.value)}>{PICKUP_SLOTS.map((x) => <option key={x}>{x}</option>)}</select></label></div>}
+          {next.includes('Pickup scheduled') && <><div className="pickup-pick"><span className="small">Pickup date</span>
+            <div className="pickup-days" role="group" aria-label="Pickup date">{upcomingDays(7).map((d) => <button key={d.iso} type="button" className={d.iso === date ? 'on' : ''} aria-pressed={d.iso === date} onClick={() => setDate(d.iso)}><b>{d.dow}</b><span>{d.label}</span></button>)}</div>
+            <label className="small">Or choose another date (within 14 days)<input type="date" value={date} min={todayISO()} max={upcomingDays(15)[14].iso} onClick={(e) => { try { (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.(); } catch { /* the calendar icon still works */ } }} onChange={(e) => setDate(e.target.value)} /></label>
+            <p className="small muted">Selected: <b>{new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</b></p></div>
+          <div className="row-gap"><label className="small">Time slot<select value={slot} onChange={(e) => setSlot(e.target.value)}>{PICKUP_SLOTS.map((x) => <option key={x}>{x}</option>)}</select></label></div></>}
           <label className="small">Message to the customer {next.includes('Rejected') ? '(required to reject)' : '(optional)'}<input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Shown on their order" /></label>
           <div className="row-gap">
             {next.filter((x) => x !== 'Rejected').map((x) => (
