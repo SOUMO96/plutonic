@@ -36,15 +36,19 @@ export function Tracking({ route }: { route: Route }) {
       )}
       {route.seg[1] && !o && (!live || looked === 'none') && <p className="err" role="alert">We couldn’t find an order called “{route.seg[1]}”{live ? ' for that email' : ''}.</p>}
       {o && (
-        <div className="opage">
+        <div className="opage opage--cols">
           <header className="opage-head"><p className="muted small">Order {o.id} · placed {when(o.createdAt)}</p><h2 className="h3">{orderLine(o, returns)}</h2></header>
-          <Tracker journey={buildJourney(o, returns, refunds)} />
+          <div className="ocard-grid">
+          <section><Tracker journey={buildJourney(o, returns, refunds)} /></section>
+          <section>
           <section className="opage-block" aria-label="Items">
             <ul className="oitems">{o.items.map((i, n) => <li key={n} className={i.cancelled ? 'is-cancelled' : undefined}><div className="oitem-row"><span className="oitem-text"><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span className="oitem-price">{inr(i.price * i.qty)}</span></div></li>)}</ul>
           </section>
           <OrderSummary o={o} />
           <footer className="opage-foot"><p className="muted small">Delivering to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}</p>
             <div className="opage-links"><Link to="/support" className="ulink small">Need help with this order?</Link>{o.step >= 0 && o.step < 3 && <button type="button" className="linkbtn small" onClick={() => { cancelOrder(o.id); say('Order cancelled'); }}>Cancel order</button>}</div></footer>
+          </section>
+          </div>
         </div>
       )}
     </div>

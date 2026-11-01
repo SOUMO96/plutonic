@@ -20,6 +20,8 @@ export function deliveryLine(o: Order): string {
   return `Arriving by ${day(o.createdAt + (o.delivery === 'express' ? 2 : 5) * DAY)}`;
 }
 /** The one plain line that says where an order stands (an open return or exchange wins over "Delivered"). */
+/** The short status chip: an open return or exchange wins over "Delivered". */
+export const pillOf = (o: Order, returns: ReturnReq[]) => { const r = o.step >= 0 && returns.find((x) => x.orderId === o.id && x.status !== 'Completed' && x.status !== 'Rejected'); return r ? (r.kind === 'exchange' ? 'Exchange' : 'Return') : statusOf(o); };
 export function orderLine(o: Order, returns: ReturnReq[]): string {
   if (o.step < 0) return 'Cancelled';
   const open = returns.find((r) => r.orderId === o.id && r.status !== 'Completed' && r.status !== 'Rejected');
@@ -115,46 +117,38 @@ function OrderPage({ o }: { o: Order }) {
   const [req, setReq] = useState<number | null>(null);
   const orderRefunds = refunds.filter((x) => x.orderId === o.id);
   return (
-    <section className="opage">
-      <Link to="/account?tab=orders" className="opage-back">← All orders</Link>
-      <header className="opage-head">
-        <p className="muted small">Order {o.id} · placed {day(o.createdAt)}</p>
-        <h2 className="h3">{orderLine(o, returns)}</h2>
-      </header>
-
-      <Tracker journey={buildJourney(o, returns, refunds)} />
-
-      <section className="opage-block" aria-label="Items">
-        <ul className="oitems">
-          {o.items.map((i, n) => {
-            const p = product(i.productId); const st = itemState(o, n, returns);
-            const declined = !st.open ? returns.filter((r) => r.orderId === o.id && r.itemIndex === n && r.status === 'Rejected').sort((a, b) => b.createdAt - a.createdAt)[0] : undefined;
-            const stale = declined && returns.some((r) => r.orderId === o.id && r.itemIndex === n && r.createdAt > declined.createdAt);
-            return (
-              <li key={n} className={i.cancelled ? 'is-cancelled' : undefined}>
-                <div className="oitem-row">{p && <span className="item-thumb"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span>}<span className="oitem-text"><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span className="oitem-price">{inr(i.price * i.qty)}</span></div>
-                {st.open && <p className="req-note" role="status">{requestNote(st.open)}</p>}
-                {declined && !stale && <p className="req-note req-note--bad">Your earlier request was declined{declined.adminNote ? `: ${declined.adminNote}` : '.'}</p>}
-                {!i.cancelled && o.step === 4 && st.canReturn && req !== n && <button type="button" className="linkbtn oitem-act" onClick={() => setReq(n)}>{st.canExchange ? 'Return or exchange' : 'Return this item'}</button>}
-                {!i.cancelled && o.step === 4 && !st.open && st.note && req !== n && <span className="muted small">{st.note}</span>}
-                {req === n && <RequestPanel order={o} index={n} canExchange={st.canExchange} onClose={() => setReq(null)} />}
-              </li>
-            );
-          })}
-        </ul>
-        {o.step === 4 && <p className="muted small">Free returns and exchanges within {RETURN_WINDOW_DAYS} days of delivery.</p>}
-      </section>
-
-      <OrderSummary o={o} />
-      {orderRefunds.map((x) => <p key={x.id} className="muted small oref">Refund {inr(x.amount)} · {x.status === 'Refunded' ? 'sent' + (x.reference ? ` (ref ${x.reference})` : '') : 'being processed'}</p>)}
-
-      <footer className="opage-foot">
-        <p className="muted small">Delivering to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state}</p>
-        <div className="opage-links">
-          <Link to="/support" className="ulink small">Need help with this order?</Link>
-          {o.step >= 0 && o.step < 3 && <button type="button" className="linkbtn small" onClick={() => { if (window.confirm(`Cancel order ${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button>}
-        </div>
-      </footer>
+    <section className="panel opage opage--cols">
+      <Link to="/account?tab=orders" className="lbl ulink small">← All orders</Link>
+      <div className="opage-head"><div><h2 className="h2">Order #{o.id}</h2><p className="muted">Placed {day(o.createdAt)} · {orderLine(o, returns)}</p></div><span className={'status' + (o.step < 0 ? ' status--bad' : '')}>{pillOf(o, returns)}</span></div>
+      <div className="ocard-grid">
+        <section>
+          <Tracker journey={buildJourney(o, returns, refunds)} />
+          {o.step >= 0 && o.step < 3 && <div className="row-gap"><button type="button" className="linkbtn small" onClick={() => { if (window.confirm(`Cancel order ${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button></div>}
+        </section>
+        <section>
+          <ul className="oitems">
+            {o.items.map((i, n) => {
+              const p = product(i.productId); const st = itemState(o, n, returns);
+              const declined = !st.open ? returns.filter((r) => r.orderId === o.id && r.itemIndex === n && r.status === 'Rejected').sort((a, b) => b.createdAt - a.createdAt)[0] : undefined;
+              const stale = declined && returns.some((r) => r.orderId === o.id && r.itemIndex === n && r.createdAt > declined.createdAt);
+              return (
+                <li key={n} className={i.cancelled ? 'is-cancelled' : undefined}>
+                  <div className="oitem-row">{p && <span className="item-thumb"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span>}<span className="oitem-text"><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span className="oitem-price">{inr(i.price * i.qty)}</span></div>
+                  {st.open && <p className="req-note" role="status">{requestNote(st.open)}</p>}
+                  {declined && !stale && <p className="req-note req-note--bad">Your earlier request was declined{declined.adminNote ? `: ${declined.adminNote}` : '.'}</p>}
+                  {!i.cancelled && o.step === 4 && st.canReturn && req !== n && <button type="button" className="linkbtn oitem-act" onClick={() => setReq(n)}>{st.canExchange ? 'Return or exchange' : 'Return this item'}</button>}
+                  {!i.cancelled && o.step === 4 && !st.open && st.note && req !== n && <span className="muted small">{st.note}</span>}
+                  {req === n && <RequestPanel order={o} index={n} canExchange={st.canExchange} onClose={() => setReq(null)} />}
+                </li>
+              );
+            })}
+          </ul>
+          <OrderSummary o={o} />
+          {orderRefunds.map((x) => <p key={x.id} className="muted small oref">Refund {inr(x.amount)} · {x.status === 'Refunded' ? 'sent' + (x.reference ? ` (ref ${x.reference})` : '') : 'being processed'}</p>)}
+          <p className="muted small">Delivering to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state}</p>
+          <Link to="/support" className="lbl ulink small">Need help with this order?</Link>
+        </section>
+      </div>
     </section>
   );
 }
@@ -170,10 +164,10 @@ function OrderWidget({ o }: { o: Order }) {
       <span className="owidget-ph">{p && <Photo p={p} ratio="4 / 5" colourId={first.colourId} />}</span>
       <span className="owidget-body">
         <b>{first.name}{more > 0 ? ` + ${more} more` : ''}</b>
+        <small className="muted">Order #{o.id}</small>
         <span className={'owidget-eta' + (o.step < 0 ? ' bad' : '')}>{line}</span>
-        <small className="muted">{o.id}</small>
       </span>
-      <b className="owidget-price">{inr(o.total)}</b>
+      <span className="owidget-side"><b>{inr(o.total)}</b><span className={'status' + (o.step < 0 ? ' status--bad' : '')}>{pillOf(o, returns)}</span></span>
       <ChevronRight size={16} aria-hidden="true" className="owidget-go" />
     </Link>
   );
