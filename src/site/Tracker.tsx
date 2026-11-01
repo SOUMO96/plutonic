@@ -16,7 +16,7 @@ export function Tracker({ journey }: { journey: Journey }) {
       <p className="muted small tracker-sub">{journey.subtitle}</p>
       <ol className="timeline">
         {journey.steps.map((s, i) => (
-          <li key={i} className={s.state === 'done' ? 'done' : s.state === 'bad' ? 'done rejected' : ''} aria-current={s.state === 'current' ? 'step' : undefined}>
+          <li key={i} className={(s.state === 'done' ? 'done' : s.state === 'bad' ? 'done rejected' : '') + (s.current ? ' current' : '')} aria-current={s.current ? 'step' : undefined}>
             <span className="dotc">{s.state === 'done' && <Check size={12} strokeWidth={2} aria-hidden="true" />}{s.state === 'bad' && '×'}</span>
             <b>{s.label}</b><span className="muted small">{s.detail ?? ''}</span>
           </li>

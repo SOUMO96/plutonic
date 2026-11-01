@@ -14,8 +14,9 @@ import { inr } from './catalog';
  * shown. Earlier events stay in the database but are never rendered as separate timelines.
  */
 export type JourneyKind = 'delivery' | 'return' | 'exchange' | 'cancelled';
-export type StepState = 'done' | 'current' | 'todo' | 'bad';
-export type JourneyStep = { label: string; state: StepState; detail?: string };
+export type StepState = 'done' | 'todo' | 'bad';
+/** A step that has happened is `done` (ticked). `current` marks the latest one reached, so it can be emphasised. */
+export type JourneyStep = { label: string; state: StepState; current?: boolean; detail?: string };
 export type Journey = {
   kind: JourneyKind;
   /** Id of the request this journey follows (empty for delivery). */
@@ -53,7 +54,7 @@ export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], 
   if (!req) {
     return { kind: 'delivery', id: '', title: 'Delivery', status: o.step === 4 ? 'Delivered' : o.step === 3 ? 'Out for delivery' : ORDER_STEPS[o.step], subtitle: `Order #${o.id}`,
       steps: ORDER_STEPS.map((s, i): JourneyStep => ({
-        label: s, state: i < o.step || o.step === 4 ? 'done' : i === o.step ? 'current' : 'todo',
+        label: s, state: i <= o.step ? 'done' : 'todo', current: i === o.step && o.step < 4,
         detail: i <= o.step ? `${when(o.history[i] ?? o.createdAt)}${i === 1 ? ' · Bengaluru warehouse' : ''}${i === 2 ? ' · Courier AWB ' + o.id.replace(/\D/g, '') + '01' : ''}` : 'Pending',
       })) };
   }
@@ -74,7 +75,8 @@ export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], 
   };
   const steps: JourneyStep[] = flow.slice(0, rejected ? reached + 1 : flow.length).map((s, i) => ({
     label: stepLabel(req.kind, s),
-    state: i < reached || (i === reached && (rejected || req.status === 'Completed')) ? 'done' : i === reached ? 'current' : 'todo',
+    state: i <= reached ? 'done' : 'todo',
+    current: i === reached && !rejected && req.status !== 'Completed',
     detail: i <= reached ? detail(s) : 'Pending',
   }));
   if (rejected) steps.push({ label: 'Request declined', state: 'bad', detail: `${at('Rejected') ? when(at('Rejected')!) : ''}${req.adminNote ? ` · ${req.adminNote}` : ''}`.replace(/^ · /, '') });

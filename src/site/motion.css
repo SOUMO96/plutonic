@@ -175,3 +175,7 @@
 .tracker { display: flex; flex-direction: column; gap: 6px; }
 .tracker-status { margin: 0; transition: opacity .2s ease; } .tracker-sub { margin: 0 0 12px; }
 .tracker .timeline li { transition: opacity .35s ease; }
+
+/* The latest step reached gets a soft ring so the customer sees "you are here" */
+.tracker .timeline li.current .dotc { box-shadow: 0 0 0 4px rgba(9,9,9,.14); }
+.tracker .timeline li.current > b { font-weight: 700; }
