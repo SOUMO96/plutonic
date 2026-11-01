@@ -170,3 +170,10 @@
 .bill { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line2, rgba(9,9,9,.18)); }
 .bill-lines { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; } .bill-lines th { text-align: left; font-weight: 500; opacity: .6; padding: 6px 0; } .bill-lines td { padding: 8px 0; border-top: 1px solid var(--line2, rgba(9,9,9,.12)); vertical-align: top; }
 .bill-lines td:first-child { display: flex; flex-direction: column; } .bill-lines th:nth-child(n+2), .bill-lines td:nth-child(n+2) { text-align: right; white-space: nowrap; padding-left: 10px; }
+
+/* The single tracker */
+.tracker { display: flex; flex-direction: column; gap: 6px; }
+.tracker-status { margin: 0; transition: opacity .2s ease; } .tracker-sub { margin: 0 0 12px; }
+.tracker .timeline li { transition: opacity .35s ease; }
+.tracker-pick { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.tracker-pick button { border: 1px solid var(--line2, rgba(9,9,9,.3)); background: none; color: inherit; padding: 6px 10px; font: 400 12px Inter, sans-serif; cursor: pointer; } .tracker-pick button.on { background: var(--fg, #090909); color: var(--bg, #F2F0EB); }

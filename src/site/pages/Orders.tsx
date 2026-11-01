@@ -4,24 +4,15 @@ import { inr, sizeStock } from '../catalog';
 import { go, Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Order } from '../store';
 import { Photo, ProductCard } from '../ui';
+import { buildJourney } from '../journeys';
+import { Tracker } from '../Tracker';
 
 const DAY = 86_400_000;
 const when = (t: number) => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
-/** Order progress with the time of each step. Used on the Orders page and the public tracking page. */
-export function OrderTimeline({ o }: { o: Order }) {
-  if (o.step < 0) return <p className="muted">This order was cancelled.{o.cancelReason ? ` Reason: ${o.cancelReason}.` : ''} {o.refundDue ? 'Any payment will be refunded to the original method.' : ''}</p>;
-  return (
-    <ol className="timeline">{ORDER_STEPS.map((s, i) => (
-      <li key={s} className={i <= o.step ? 'done' : ''} aria-current={i === o.step ? 'step' : undefined}><span className="dotc">{i <= o.step && <Check size={12} strokeWidth={2} aria-hidden="true" />}</span>
-        <b>{s}</b><span className="muted small">{i <= o.step ? when(o.history[i] ?? o.createdAt) : 'Pending'}{i === 1 && i <= o.step ? ' · Bengaluru warehouse' : ''}{i === 2 && i <= o.step ? ' · Courier AWB ' + o.id.replace(/\D/g, '') + '01' : ''}</span></li>
-    ))}</ol>
-  );
-}
-
 /** Order tracking. */
 export function Tracking({ route }: { route: Route }) {
-  const { orders, cancelOrder, say, live, lookupOrder, user } = useStore();
+  const { orders, cancelOrder, say, live, lookupOrder, user, returns, refunds } = useStore();
   const [q, setQ] = useState(route.seg[1] ?? '');
   const [mail, setMail] = useState('');
   const [looked, setLooked] = useState<'idle' | 'busy' | 'none'>('idle');
@@ -47,7 +38,7 @@ export function Tracking({ route }: { route: Route }) {
           <section>
             <h1 className="h1">{o.step < 0 ? 'Cancelled' : o.step === 4 ? 'Delivered' : o.step === 3 ? 'Out for delivery' : ORDER_STEPS[o.step]}</h1>
             <p className="muted">Order #{o.id} · Placed {when(o.createdAt)}{o.sample ? ' · sample order' : ''}</p>
-            <OrderTimeline o={o} />
+            <Tracker journey={buildJourney(o, returns, refunds)} />
             <div className="row-gap">{o.step >= 0 && o.step < 3 && <button type="button" className="btn btn--ghost btn--sm" onClick={() => { cancelOrder(o.id); say('Order cancelled'); }}>Cancel order</button>}<Link to="/support" className="lbl ulink">Need help with this order?</Link></div>
           </section>
           <aside className="summary"><span className="lbl muted">In this order</span>

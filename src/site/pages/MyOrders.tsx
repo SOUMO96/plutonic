@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Check, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { inr, RETURN_WINDOW_DAYS, sizeStock } from '../catalog';
 import { Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Order, type ReturnReq } from '../store';
-import { currentPiece, flowFor, itemState, RETURN_REASONS, stepLabel } from '../returnRules';
+import { currentPiece, itemState, RETURN_REASONS } from '../returnRules';
+import { buildJourney, journeyChoices } from '../journeys';
+import { Tracker } from '../Tracker';
 import { Photo } from '../ui';
 
 const DAY = 86_400_000;
@@ -39,50 +41,6 @@ export function OrderBill({ o }: { o: Order }) {
       <p className="muted small">Payment: {o.payment === 'cod' ? 'Pay on delivery' : o.payment === 'upi' ? 'UPI' : o.payment === 'card' ? 'Card' : 'Net banking'}{o.paymentStatus === 'paid' ? ' · received' : ''}{open.length < o.items.length ? ` · ${o.items.length - open.length} item(s) cancelled` : ''}</p>
       {(o.refundDue ?? 0) > 0 && <p className="note" role="note">Refund for cancelled items: {inr(o.refundDue ?? 0)}</p>}
     </div>
-  );
-}
-
-/** One tracking for the whole order. Return and exchange steps continue on this same timeline after delivery. */
-function OrderTracking({ o }: { o: Order }) {
-  const { returns, refunds } = useStore();
-  if (o.step < 0) return <p className="muted">This order was cancelled.{o.cancelReason ? ` Reason: ${o.cancelReason}.` : ''}{(o.refundDue ?? 0) > 0 ? ' A refund is being processed to the original payment method.' : ''}</p>;
-  const reqs = returns.filter((r) => r.orderId === o.id).sort((a, b) => a.createdAt - b.createdAt);
-  return (
-    <ol className="timeline timeline--one">
-      {ORDER_STEPS.map((s, i) => (
-        <li key={s} className={i <= o.step ? 'done' : ''} aria-current={i === o.step && reqs.length === 0 ? 'step' : undefined}><span className="dotc">{i <= o.step && <Check size={12} strokeWidth={2} aria-hidden="true" />}</span>
-          <b>{s}</b><span className="muted small">{i <= o.step ? when(o.history[i] ?? o.createdAt) : 'Pending'}{i === 1 && i <= o.step ? ' · Bengaluru warehouse' : ''}{i === 2 && i <= o.step ? ' · Courier AWB ' + o.id.replace(/\D/g, '') + '01' : ''}</span></li>
-      ))}
-      {reqs.map((r) => <RequestSteps key={r.id} r={r} refund={refunds.find((x) => x.returnId === r.id)} />)}
-    </ol>
-  );
-}
-
-function RequestSteps({ r, refund }: { r: ReturnReq; refund?: { amount: number; status: string; reference?: string } }) {
-  const hist = r.history ?? [{ status: 'Requested' as const, at: r.createdAt }];
-  const at = (s: string) => hist.find((h) => h.status === s)?.at;
-  const flow = flowFor(r.kind);
-  const rejected = r.status === 'Rejected';
-  // how far this request got (a rejected one stops at the last step it reached)
-  const reached = rejected ? Math.max(...hist.filter((h) => h.status !== 'Rejected').map((h) => flow.indexOf(h.status)), 0) : flow.indexOf(r.status);
-  const title = `${r.kind === 'exchange' ? 'Exchange' : 'Return'} · ${r.productName} (${r.variant})${r.kind === 'exchange' && r.exchangeTo ? ` → size ${r.exchangeTo.size}` : ''}`;
-  const detail = (s: ReturnReq['status'], done: boolean) => {
-    if (!done) return 'Pending';
-    const t = at(s); const stamp = t ? when(t) : '';
-    if (s === 'Pickup scheduled' && r.pickupDate) return `${stamp} · pickup ${longDay(r.pickupDate)}, ${r.pickupSlot ?? ''}`;
-    if (s === 'Replacement shipped') return `${stamp} · Courier AWB ${r.id.replace(/\D/g, '')}02`;
-    if (s === 'Completed' && r.kind === 'return') return `${stamp}${refund ? ` · refund ${inr(refund.amount)} ${refund.status === 'Refunded' ? `sent${refund.reference ? ` (ref ${refund.reference})` : ''}` : 'being processed (5–7 working days)'}` : ''}`;
-    return stamp;
-  };
-  return (
-    <>
-      <li className="tl-group"><b>{title}</b>{r.adminNote && <span className="muted small">Message from PLUTONIC: {r.adminNote}</span>}</li>
-      {flow.map((s, i) => {
-        const done = i <= reached && (!rejected || i === 0 || !!at(s));
-        return <li key={r.id + s} className={'tl-sub' + (done ? ' done' : '')} aria-current={!rejected && i === reached && r.status !== 'Completed' ? 'step' : undefined}><span className="dotc">{done && <Check size={12} strokeWidth={2} aria-hidden="true" />}</span><b>{stepLabel(r.kind, s)}</b><span className="muted small">{detail(s, done)}</span></li>;
-      })}
-      {rejected && <li className="tl-sub done rejected"><span className="dotc">×</span><b>Request declined</b><span className="muted small">{at('Rejected') ? when(at('Rejected')!) : ''}{r.adminNote ? ` · ${r.adminNote}` : ''}</span></li>}
-    </>
   );
 }
 
@@ -149,6 +107,7 @@ function requestNote(r: ReturnReq): string {
 function OrderPage({ o }: { o: Order }) {
   const { returns, refunds, cancelOrder, product } = useStore();
   const [req, setReq] = useState<number | null>(null);
+  const [focus, setFocus] = useState<string | undefined>();   // which item's journey the one tracker follows (only matters with several requests)
   const orderRefunds = refunds.filter((x) => x.orderId === o.id);
   return (
     <section className="panel opage">
@@ -156,8 +115,7 @@ function OrderPage({ o }: { o: Order }) {
       <div className="opage-head"><div><h2 className="h2">Order #{o.id}</h2><p className="muted">Placed {when(o.createdAt)} · {deliveryLine(o)}</p></div><span className={'status' + (o.step < 0 ? ' status--bad' : '')}>{statusOf(o)}</span></div>
       <div className="ocard-grid">
         <section>
-          <h3 className="lbl muted">Tracking</h3>
-          <OrderTracking o={o} />
+          <Tracker journey={buildJourney(o, returns, refunds, focus)} choices={journeyChoices(o, returns)} onChoose={setFocus} />
           {o.step >= 0 && o.step < 3 && <div className="row-gap"><button type="button" className="btn btn--ghost btn--sm" onClick={() => { if (window.confirm(`Cancel order #${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button><span className="muted small">You can cancel until the order ships.</span></div>}
           {o.step === 3 && <p className="muted small">This order is out for delivery, so it can no longer be cancelled. You can return or exchange items after delivery.</p>}
         </section>
