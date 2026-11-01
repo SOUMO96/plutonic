@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Minus, Plus, X, ZoomIn } from 'lucide-react';
+import { Heart, Minus, Plus, X, ZoomIn } from 'lucide-react';
 import { discountPercent, inr, RETURN_WINDOW_DAYS, sizeStock, FREE_SHIPPING_ABOVE, type Product as P } from '../catalog';
 import { go, Link, type Route } from '../router';
 import { useStore } from '../store';
@@ -107,15 +107,15 @@ function Detail({ p, route, products, cartHas, addToCart, say, reviews, addRevie
 
           <div className="opt"><div className="opt-head"><span className="lbl">Size</span><button type="button" className="lbl ulink" onClick={() => setGuide(true)}>Size guide</button></div>
             <div className="sizes" role="radiogroup" aria-label="Size">{p.sizes.map((s) => { const n = sizeStock(p, colourId, s); return <button key={s} type="button" role="radio" aria-checked={size === s} className={(size === s ? 'on' : '') + (n <= 0 ? ' sold' : '')} title={n <= 0 ? 'Out of stock' : undefined} onClick={() => { setSize(s); setError(''); setQty(1); }}>{s}{n <= 0 && <span className="sr"> out of stock</span>}</button>; })}</div>
-            <span className={'stock' + (size && left > 0 && left <= 3 ? ' low' : '')} role="status">{stockText}{inBag > 0 ? ` · ${inBag} in your bag` : ''}</span></div>
+            <span className={'stock' + (size && left > 0 && left <= 3 ? ' low' : '') + (size && left <= 0 ? ' out' : '')} role="status">{stockText}{inBag > 0 ? ` · ${inBag} in your bag` : ''}</span></div>
 
           <div className="buy-actions" ref={buyRef}>
             <div className="qty" role="group" aria-label="Quantity" style={size && left <= 0 ? { display: 'none' } : undefined}><button type="button" aria-label="Decrease quantity" onClick={() => setQty(Math.max(1, qty - 1))}><Minus size={14} /></button><span>{qty}</span><button type="button" aria-label="Increase quantity" onClick={() => setQty(Math.min(Math.max(left, 1), qty + 1))}><Plus size={14} /></button></div>
             {size && left <= 0
               ? <button type="button" className="btn btn--dark btn--wide" disabled={notified.includes(p.id)} onClick={() => notifyMe(p.id)}>{notified.includes(p.id) ? 'We’ll notify you ✓' : 'Notify me'}</button>
               : <button type="button" className={'btn btn--dark btn--wide' + (added ? ' is-added' : '')} onClick={add}>{added ? 'Added ✓' : 'Add to bag'}</button>}
-            <WishButton id={p.id} name={p.name} />
           </div>
+          <button type="button" className={'btn btn--ghost btn--block wish-btn' + (isWished(p.id) ? ' on' : '')} aria-pressed={isWished(p.id)} onClick={() => { const was = isWished(p.id); toggleWish(p.id); say(was ? 'Removed from your wishlist' : 'Saved to your wishlist'); }}><Heart size={16} strokeWidth={1.5} fill={isWished(p.id) ? 'currentColor' : 'none'} aria-hidden="true" />{isWished(p.id) ? 'Saved to wishlist' : 'Add to wishlist'}</button>
           {error && !(size && left <= 0) && <p className="err" role="alert">{error}</p>}
           {!(size && left <= 0) && <button type="button" className="btn btn--ghost btn--block" onClick={() => { if (add()) go('/checkout'); }}>Buy now</button>}
 
