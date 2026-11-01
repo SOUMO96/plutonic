@@ -189,7 +189,7 @@ function HeaderSearch({ open, onClose }: { open: boolean; onClose: () => void })
 }
 
 function MobileMenu({ onClose }: { onClose: () => void }) {
-  const { user, cartCount, wishlist } = useStore();
+  const { user, wishlist } = useStore();
   const [shown, setShown] = useState(false);
   useEffect(() => {
     setShown(true);
@@ -197,7 +197,7 @@ function MobileMenu({ onClose }: { onClose: () => void }) {
     window.addEventListener('keydown', k); document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', k); document.body.style.overflow = ''; };
   }, [onClose]);
-  const items = [...NAV, { to: '/wishlist', label: `Wishlist (${wishlist.length})` }, { to: '/cart', label: `Bag (${cartCount})` }, { to: '/account', label: user ? 'My account' : 'Sign in' }, { to: '/tracking', label: 'Track an order' }, { to: '/about', label: 'About' }, { to: '/support', label: 'Support' }];
+  const items = [...NAV, { to: '/account', label: user ? 'My account' : 'Sign in' }, { to: '/account?tab=orders', label: 'My orders' }, { to: '/wishlist', label: `Wishlist (${wishlist.length})` }, { to: '/about', label: 'About' }, { to: '/support', label: 'Support' }];
   return (
     <div className={'drawer' + (shown ? ' open' : '')} role="dialog" aria-modal="true" aria-label="Menu">
       <div className="drawer-head"><img src={LOGO} alt="PLUTONIC" height={44} /><button type="button" className="ico" onClick={onClose} aria-label="Close menu"><X size={22} strokeWidth={1.4} /></button></div>
@@ -252,7 +252,7 @@ export function Footer({ onReplayIntro }: { onReplayIntro?: () => void }) {
         <img src={LOGO} alt="PLUTONIC" className="ftr-logo" />
         <div className="ftr-cols">
           <div><span className="lbl">Shop</span><Link to="/men">Men</Link><Link to="/women">Women</Link><Link to="/shop?new=1">New arrivals</Link><Link to="/shop">Shop all</Link><Link to="/wishlist">Wishlist</Link></div>
-          <div><span className="lbl">Help</span><Link to="/tracking">Track an order</Link><Link to="/account?tab=orders">Returns &amp; exchanges</Link><Link to="/support">Shipping</Link><Link to="/support">Contact us</Link></div>
+          <div><span className="lbl">Help</span><Link to="/account?tab=orders">My orders</Link><Link to="/account?tab=orders">Returns &amp; exchanges</Link><Link to="/support">Shipping</Link><Link to="/support">Contact us</Link></div>
           <div><span className="lbl">PLUTONIC</span><Link to="/about">Our story</Link><Link to="/support">Size guide</Link><Link to="/support">Privacy</Link><Link to="/support">Terms</Link>{onReplayIntro && <button type="button" className="linkbtn" onClick={onReplayIntro}>Replay the welcome film</button>}</div>
         </div>
         <div className="ftr-base"><span>© PLUTONIC. Beyond the ordinary.</span><span>India · ₹ INR · English</span></div>

@@ -43,7 +43,7 @@ const FAQ = [
   ['What is your exchange and return policy?', `Unworn pieces with tags can be exchanged or returned within ${RETURN_WINDOW_DAYS} days of delivery. We collect from your door.`],
   ['How do I choose a size?', 'Use the size guide below, or the fit notes on each product. Between sizes, size up for ease, down for a firmer hold.'],
   ['Which payment methods do you accept?', 'UPI, credit and debit cards, net banking and Cash on Delivery.'],
-  ['Can I cancel an order?', 'Yes, until it has shipped. Open the order in Track an order and choose Cancel.'],
+  ['Can I cancel an order?', 'Yes, until it has shipped. Sign in, open the order in My orders and choose Cancel.'],
 ];
 const SIZES: Record<string, string[][]> = {
   Women: [['Size', 'Bust (cm)', 'Waist (cm)', 'Hip (cm)'], ['XS', '78–82', '60–64', '86–90'], ['S', '82–86', '64–68', '90–94'], ['M', '86–90', '68–72', '94–98'], ['L', '90–95', '72–77', '98–103'], ['XL', '95–100', '77–82', '103–108'], ['XXL', '100–106', '82–88', '108–114']],
@@ -60,7 +60,7 @@ export function Support() {
     <div className="pl-wrap support">
       <div className="page-head"><span className="lbl muted">Customer support</span><h1 className="h1">How can we help?</h1></div>
       <div className="grid grid--4 help-tiles">
-        <Link to="/tracking" className="help-tile"><b>Track an order</b><span className="muted small">Live status with your order number.</span></Link>
+        <Link to="/account?tab=orders" className="help-tile"><b>My orders</b><span className="muted small">Sign in to follow an order, cancel it, or start a return or exchange.</span></Link>
         <Link to="/account?tab=orders" className="help-tile"><b>Return or exchange</b><span className="muted small">Start a request and book a pickup.</span></Link>
         <a href="#size-guide" className="help-tile" onClick={(e) => { e.preventDefault(); document.getElementById('size-guide')?.scrollIntoView({ behavior: 'smooth' }); }}><b>Size guide</b><span className="muted small">Measurements for every fit.</span></a>
         <div className="help-tile"><b>Talk to us</b><span className="muted small placeholder">[WhatsApp number] · [support email] · [days and hours] IST</span></div>

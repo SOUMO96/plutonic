@@ -12,7 +12,7 @@ import Listing from './pages/Listing';
 import Product from './pages/Product';
 import Cart from './pages/Cart';
 import Account from './pages/Account';
-import { Tracking, Wishlist } from './pages/Orders';
+import { Wishlist } from './pages/Orders';
 import { About, Support } from './pages/Info';
 
 // Heavier, rarely-first pages are split out of the initial bundle.
@@ -93,7 +93,8 @@ export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }
     case 'checkout': page = <Checkout />; break;
     case 'order': page = <Confirmation route={route} />; break;
     case 'account': page = <Account route={route} />; break;
-    case 'tracking': page = <Tracking route={route} />; break;
+    // Orders are only for signed-in customers (as on a computer): the old public tracking address goes to My orders.
+    case 'tracking': page = <Redirect to="/account?tab=orders" />; break;
     case 'wishlist': page = <Wishlist />; break;
     // Returns and exchanges now live on each order (Account > Orders); old links land there.
     case 'returns': page = <Redirect to="/account?tab=orders" />; break;
