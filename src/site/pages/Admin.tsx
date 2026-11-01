@@ -125,6 +125,7 @@ function ReturnCard({ r }: { r: ReturnReq }) {
         <div><b>Order #{r.orderId} · {r.kind === 'exchange' ? 'Exchange' : 'Return'} {r.id}</b><span className="muted small">{r.productName} · {r.variant}{r.qty ? ` · Qty ${r.qty}` : ''}{o ? ` · ${o.address.name}, ${o.address.city}` : ''}</span></div>
         <span className={'status' + (r.status === 'Rejected' ? ' status--bad' : r.status === 'Requested' ? ' status--info' : '')}>{r.status}</span>
       </div>
+      {r.batchId && (r.batchSize ?? 0) > 1 && <p className="muted small">Sent together with {s.returns.filter((x) => x.batchId === r.batchId && x.id !== r.id).map((x) => x.id).join(', ') || 'other items'} ({r.batchSize} items, one {r.kind}). The customer sees them as one tracking.</p>}
       {r.needsReview && r.status === 'Requested' && <p className="note" role="note"><b>Not auto-approved.</b> {r.reviewReason}</p>}
       <p className="small">Reason: <b>{r.reason}</b>{r.note ? ` · “${r.note}”` : ''}</p>
       {r.kind === 'exchange' && r.exchangeTo && <p className="small">Customer wants size <b>{r.exchangeTo.size}</b> instead of <b>{r.piece?.size ?? r.variant}</b> (same colour: {r.exchangeTo.colourName}). One exchange per item.</p>}

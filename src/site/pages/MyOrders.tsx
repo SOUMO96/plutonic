@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ArrowLeftRight, ChevronRight, ChevronUp } from 'lucide-react';
 import { inr, RETURN_WINDOW_DAYS, sizeStock } from '../catalog';
 import { Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Order, type ReturnReq } from '../store';
 import { CUSTOMER_CANCEL_BEFORE } from '../orderCancel';
-import { currentPiece, itemState, RETURN_REASONS } from '../returnRules';
+import { currentPiece, isOpen, itemState, refundForItem, RETURN_REASONS } from '../returnRules';
 import { buildJourney } from '../journeys';
 import { Tracker } from '../Tracker';
 import { Photo } from '../ui';
@@ -53,51 +53,138 @@ export function OrderSummary({ o }: { o: Order }) {
   );
 }
 
-/** Ask to return or exchange one item. Exchanges are size-only; the server enforces every rule. */
-function RequestPanel({ order, index, canExchange, onClose }: { order: Order; index: number; canExchange: boolean; onClose: () => void }) {
-  const { product, returns, createReturn, say } = useStore();
-  const it = order.items[index]; const p = product(it.productId);
-  const piece = currentPiece(order, index, returns);
-  const [kind, setKind] = useState<'exchange' | 'return'>(canExchange ? 'exchange' : 'return');
+/**
+ * ONE order-level section: a button that opens, in place, a single Return / Exchange request for any number of eligible items.
+ * One action for the whole request (return OR exchange, never both); a checkbox at the end of each eligible row; in Exchange mode
+ * each chosen item gets its own replacement-size picker (same sizes and stock rules as before). The server enforces every rule again.
+ */
+function ReturnExchange({ order, open, setOpen }: { order: Order; open: boolean; setOpen: (v: boolean) => void }) {
+  const { returns, product, createReturnBatch, say } = useStore();
+  const [kind, setKind] = useState<'return' | 'exchange'>('return');
+  const [picked, setPicked] = useState<Record<number, boolean>>({});
+  const [sizes, setSizes] = useState<Record<number, string>>({});
   const [reason, setReason] = useState(RETURN_REASONS[0]);
   const [note, setNote] = useState('');
-  const [size, setSize] = useState('');
+  const [review, setReview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const sizes = (p?.sizes ?? []).filter((s) => s !== piece.size && sizeStock(p!, piece.colourId, s) >= it.qty);
-  // Suggest the natural size change for the reason chosen; the customer can still change it.
-  useEffect(() => {
-    if (!p || kind !== 'exchange') return;
-    const at = p.sizes.indexOf(piece.size);
+  const states = order.items.map((_, n) => itemState(order, n, returns));
+  const eligible = (n: number) => !order.items[n].cancelled && (kind === 'return' ? states[n].canReturn : states[n].canExchange);
+  const anyEligible = order.items.some((_, n) => !order.items[n].cancelled && states[n].canReturn);
+  const chosen = order.items.map((_, n) => n).filter((n) => picked[n] && eligible(n));
+  const piece = (n: number) => currentPiece(order, n, returns);
+  /** Replacement sizes in stock for one item, leaving room for other chosen items that want the same size. */
+  const optionsFor = (n: number) => {
+    const it = order.items[n]; const p = product(it.productId); const pc = piece(n);
+    if (!p) return [] as string[];
+    return p.sizes.filter((sz) => {
+      if (sz === pc.size) return false;
+      const wanted = chosen.filter((m) => m !== n && order.items[m].productId === it.productId && piece(m).colourId === pc.colourId && sizes[m] === sz).reduce((t, m) => t + order.items[m].qty, 0);
+      return sizeStock(p, pc.colourId, sz) >= it.qty + wanted;
+    });
+  };
+  /** The natural size change for the reason (too big -> one size down, too small -> one size up). The customer can always change it. */
+  const suggest = (n: number): string => {
+    const p = product(order.items[n].productId); if (!p) return '';
+    const at = p.sizes.indexOf(piece(n).size);
     const want = reason === 'Too big' ? p.sizes[at - 1] : reason === 'Too small' ? p.sizes[at + 1] : undefined;
-    if (want && sizes.includes(want)) setSize(want);
+    return want && optionsFor(n).includes(want) ? want : '';
+  };
+  useEffect(() => {   // reason changed: re-suggest for every chosen item
+    if (kind !== 'exchange') return;
+    setSizes((cur) => { const next = { ...cur }; for (const n of chosen) { const w = suggest(n); if (w) next[n] = w; } return next; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reason, kind]);
+  useEffect(() => {   // an item was just chosen: fill in a suggestion only where nothing is picked yet
+    if (kind !== 'exchange') return;
+    setSizes((cur) => { const next = { ...cur }; for (const n of chosen) if (!next[n]) { const w = suggest(n); if (w) next[n] = w; } return next; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked]);
+  const reset = () => { setPicked({}); setSizes({}); setNote(''); setReview(false); setError(''); setReason(RETURN_REASONS[0]); };
+  const switchKind = (k: 'return' | 'exchange') => { setKind(k); setReview(false); setError(''); setPicked((cur) => Object.fromEntries(Object.entries(cur).filter(([n]) => (k === 'return' ? states[+n].canReturn : states[+n].canExchange)))); };
+
+  const check = (): string => {
+    if (!chosen.length) return 'Select at least one item.';
+    if (reason.trim().length < 2) return 'Choose a reason.';
+    if (kind === 'exchange') for (const n of chosen) if (!sizes[n] || !optionsFor(n).includes(sizes[n])) return `Choose the replacement size for ${order.items[n].name}.`;
+    return '';
+  };
+  const submit = async () => {
+    const bad = check(); if (bad) { setError(bad); setReview(false); return; }
+    setBusy(true); setError('');
+    const r = await createReturnBatch({ orderId: order.id, kind, reason, note, items: chosen.map((n) => ({ itemIndex: n, exchangeSize: kind === 'exchange' ? sizes[n] : undefined })) });
+    setBusy(false);
+    if (!r.ok) { setError(r.message); setReview(false); return; }
+    say('Request sent. Please wait for our response.'); reset(); setOpen(false);   // the tracker above now shows it and updates by itself
+  };
+
+  if (order.step !== 4) return null;   // (after every hook above, so the number of hooks never changes between renders)
+  if (!anyEligible) {
+    const why = states.map((st) => st.note).find(Boolean);
+    return why ? <p className="muted small rx-none">{why}</p> : null;
+  }
+  const refundTotal = chosen.reduce((t, n) => t + refundForItem(order, n), 0);
   return (
-    <form className="req-form" noValidate onSubmit={async (e) => {
-      e.preventDefault(); setError('');
-      if (kind === 'exchange' && !size) { setError('Choose the size you want instead.'); return; }
-      setBusy(true);
-      const r = await createReturn({ orderId: order.id, itemIndex: index, kind, reason, note, exchangeSize: kind === 'exchange' ? size : undefined });
-      setBusy(false);
-      if (!r.ok) { setError(r.message); return; }
-      say('Request sent. Please wait for our response.'); onClose();   // the order tracking now shows it and updates by itself
-    }}>
-      <h4 className="h3">{canExchange ? 'Return or exchange' : 'Return'} · {it.name}</h4>
-      <p className="muted small">{piece.colourName} · {piece.size} · Qty {it.qty}. Unworn with tags. Free pickup from {order.address.line1}, {order.address.city}.</p>
-      {canExchange ? <>
-        <label className="opt-row"><input type="radio" name={'k' + index} checked={kind === 'exchange'} onChange={() => setKind('exchange')} /><span><b>Exchange for another size</b><small>Same colour, shipped at no cost. You can exchange an item once.</small></span></label>
-        <label className="opt-row"><input type="radio" name={'k' + index} checked={kind === 'return'} onChange={() => setKind('return')} /><span><b>Return</b><small>Refund to your original payment method</small></span></label>
-      </> : <p className="note" role="note">This item was already exchanged once, so it can only be returned. After a return you can place a new order.</p>}
-      <label>Reason<select value={reason} onChange={(e) => setReason(e.target.value)}>{RETURN_REASONS.map((r) => <option key={r}>{r}</option>)}</select></label>
-      {kind === 'exchange' && (
-        <label>Size you want instead<select value={size} onChange={(e) => setSize(e.target.value)} aria-invalid={error && !size ? true : undefined}><option value="">Select size</option>{sizes.map((s) => <option key={s}>{s}</option>)}</select>
-          {sizes.length === 0 && <span className="muted small">No other size is in stock right now. You can return the item instead.</span>}</label>
-      )}
-      <label>Anything else? (optional)<textarea rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-      {error && <p className="err" role="alert">{error}</p>}
-      <div className="row-gap"><button className="btn btn--dark btn--sm" type="submit" disabled={busy}>{busy ? 'Sending…' : 'Confirm pickup request'}</button><button className="btn btn--ghost btn--sm" type="button" onClick={onClose} disabled={busy}>Cancel</button></div>
-    </form>
+    <section className="rx" aria-label="Return or exchange">
+      <button type="button" className="rx-btn" aria-expanded={open} aria-controls={'rx-' + order.id} onClick={() => setOpen(!open)}>
+        <ArrowLeftRight size={18} strokeWidth={1.6} aria-hidden="true" /><span>Return / Exchange Items</span>{open ? <ChevronUp size={18} strokeWidth={1.6} aria-hidden="true" /> : <ChevronRight size={18} strokeWidth={1.6} aria-hidden="true" />}
+      </button>
+      <div id={'rx-' + order.id} className={'rx-wrap' + (open ? ' open' : '')} aria-hidden={!open}>
+        <div className="rx-inner">
+          <div className="rx-panel">
+            <h3 className="rx-title"><ArrowLeftRight size={16} strokeWidth={1.6} aria-hidden="true" /> Return / Exchange Items</h3>
+            <p className="muted small">Choose one action and select the items you want to process. Free pickup from {order.address.line1}, {order.address.city}. Items must be unworn, with tags.</p>
+            {!review ? <>
+              <div className="rx-seg" role="radiogroup" aria-label="Action">
+                <button type="button" role="radio" aria-checked={kind === 'return'} className={kind === 'return' ? 'on' : ''} onClick={() => switchKind('return')}>Return</button>
+                <button type="button" role="radio" aria-checked={kind === 'exchange'} className={kind === 'exchange' ? 'on' : ''} onClick={() => switchKind('exchange')}>Exchange</button>
+              </div>
+              <ul className="rx-items">
+                {order.items.map((it, n) => {
+                  const p = product(it.productId); const st = states[n]; const ok = eligible(n); const pc = piece(n);
+                  const why = it.cancelled ? 'Cancelled' : st.open ? `Request ${st.open.id} is in progress.` : ok ? '' : (kind === 'exchange' && st.canReturn ? 'Already exchanged once, so this item can only be returned.' : st.note ?? 'Not available for this action.');
+                  return (
+                    <li key={n} className={(ok ? '' : 'is-off ') + (picked[n] && ok ? 'is-picked' : '')}>
+                      <label className="rx-row">
+                        {p && <span className="item-thumb"><Photo p={p} ratio="4 / 5" colourId={it.colourId} /></span>}
+                        <span className="oitem-text"><b>{it.name}</b><small className="muted">{pc.colourName} · {pc.size} · Qty {it.qty}</small>{why && <small className="rx-why">{why}</small>}</span>
+                        <span className="oitem-price">{inr(it.price * it.qty)}</span>
+                        <input type="checkbox" className="rx-check" disabled={!ok} checked={!!picked[n] && ok} onChange={(e) => { setPicked({ ...picked, [n]: e.target.checked }); setError(''); }} aria-label={`Select ${it.name}`} />
+                      </label>
+                      {kind === 'exchange' && picked[n] && ok && (() => { const opts = optionsFor(n); return (
+                        <div className="rx-size">
+                          <span className="muted small">Original size: <b>{pc.size}</b></span>
+                          <label>Replacement size
+                            <select value={sizes[n] ?? ''} onChange={(e) => { setSizes({ ...sizes, [n]: e.target.value }); setError(''); }} disabled={!opts.length} aria-label={`Replacement size for ${it.name}`}>
+                              <option value="">{opts.length ? 'Select size' : 'None in stock'}</option>{opts.map((sz) => <option key={sz} value={sz}>{sz}</option>)}
+                            </select>
+                          </label>
+                          {!opts.length && <small className="rx-why">No other size is in stock right now. You can return this item instead.</small>}
+                        </div>); })()}
+                    </li>
+                  );
+                })}
+              </ul>
+              <label className="rx-reason"><span>{kind === 'return' ? 'Return reason' : 'Reason'}</span>
+                <select value={reason} onChange={(e) => setReason(e.target.value)}>{RETURN_REASONS.map((r) => <option key={r}>{r}</option>)}</select></label>
+              {error && <p className="err" role="alert">{error}</p>}
+              <div className="rx-foot"><span className="muted small">{chosen.length ? `${chosen.length} item${chosen.length > 1 ? 's' : ''} selected` : 'No items selected'}</span>
+                <button type="button" className="rx-go" onClick={() => { const bad = check(); if (bad) { setError(bad); return; } setError(''); setReview(true); }}>Continue →</button></div>
+            </> : <>
+              <div className="rx-review" role="group" aria-label="Review your request">
+                <p><b>{kind === 'return' ? 'Return' : 'Exchange'}</b> · {chosen.length} item{chosen.length > 1 ? 's' : ''} · reason: {reason}</p>
+                <ul>{chosen.map((n) => <li key={n}><span>{order.items[n].name}</span><span>{kind === 'exchange' ? `${piece(n).size} → ${sizes[n]}` : inr(refundForItem(order, n))}</span></li>)}</ul>
+                {kind === 'return' ? <p className="rx-sum"><span>Refund to your original payment method</span><b>{inr(refundTotal)}</b></p> : <p className="muted small">Your replacements ship at no cost after we receive the original pieces. Each item can be exchanged once.</p>}
+                <label>Anything else? (optional)<textarea rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} /></label>
+              </div>
+              {error && <p className="err" role="alert">{error}</p>}
+              <div className="rx-foot"><button type="button" className="linkbtn small" onClick={() => setReview(false)} disabled={busy}>← Back</button>
+                <button type="button" className="rx-go" onClick={() => void submit()} disabled={busy}>{busy ? 'Sending…' : 'Confirm pickup request'}</button></div>
+            </>}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -115,8 +202,8 @@ function requestNote(r: ReturnReq): string {
 
 function OrderPage({ o }: { o: Order }) {
   const { returns, refunds, cancelOrder, product } = useStore();
-  const [req, setReq] = useState<number | null>(null);
   const orderRefunds = refunds.filter((x) => x.orderId === o.id);
+  const [rxOpen, setRxOpen] = useState(false);
   return (
     <section className="panel opage opage--cols">
       <Link to="/account?tab=orders" className="opage-back">← All orders</Link>
@@ -127,7 +214,7 @@ function OrderPage({ o }: { o: Order }) {
           {o.step >= 0 && o.step < CUSTOMER_CANCEL_BEFORE && <div className="row-gap ocancel"><button type="button" className="linkbtn small" onClick={() => { if (window.confirm(`Cancel order ${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button></div>}
         </section>
         <section>
-          <ul className="oitems">
+          <ul className={'oitems' + (rxOpen ? ' is-hidden' : '')}>
             {o.items.map((i, n) => {
               const p = product(i.productId); const st = itemState(o, n, returns);
               const declined = !st.open ? returns.filter((r) => r.orderId === o.id && r.itemIndex === n && r.status === 'Rejected').sort((a, b) => b.createdAt - a.createdAt)[0] : undefined;
@@ -137,15 +224,15 @@ function OrderPage({ o }: { o: Order }) {
                   <div className="oitem-row">{p && <span className="item-thumb"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span>}<span className="oitem-text"><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span className="oitem-price">{inr(i.price * i.qty)}</span></div>
                   {st.open && <p className="req-note" role="status">{requestNote(st.open)}</p>}
                   {declined && !stale && <p className="req-note req-note--bad">Your earlier request was declined{declined.adminNote ? `: ${declined.adminNote}` : '.'}</p>}
-                  {!i.cancelled && o.step === 4 && st.canReturn && req !== n && <button type="button" className="linkbtn oitem-act" onClick={() => setReq(n)}>{st.canExchange ? 'Return or exchange' : 'Return this item'}</button>}
-                  {!i.cancelled && o.step === 4 && !st.open && st.note && req !== n && <span className="muted small">{st.note}</span>}
-                  {req === n && <RequestPanel order={o} index={n} canExchange={st.canExchange} onClose={() => setReq(null)} />}
+                  {!i.cancelled && o.step === 4 && !st.open && st.note && <span className="muted small">{st.note}</span>}
                 </li>
               );
             })}
           </ul>
+          <ReturnExchange order={o} open={rxOpen} setOpen={setRxOpen} />
           <OrderSummary o={o} />
-          {orderRefunds.map((x) => <p key={x.id} className="muted small oref">Refund {inr(x.amount)} · {x.status === 'Refunded' ? 'sent' + (x.reference ? ` (ref ${x.reference})` : '') : 'being processed'}</p>)}
+          {orderRefunds.map((x) => <p key={x.id} className="muted small oref">Refund of {inr(x.amount)}{x.returnId ? ' for a returned item' : ' for cancelled items'} · {x.status === 'Refunded' ? 'sent' + (x.reference && x.reference !== 'SIMULATED' ? ` (ref ${x.reference})` : '') : 'being processed'}</p>)}
+          {orderRefunds.length > 0 && o.items.some((i) => !i.cancelled) && <p className="muted small oref">The other items in this order stay with you.</p>}
           <div className="ometa"><span className="lbl muted">Delivering to</span><p>{o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state}</p></div>
           <Link to="/support" className="ulink small ohelp">Need help with this order?</Link>
         </section>
