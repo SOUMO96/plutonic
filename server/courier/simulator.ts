@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import type { Courier, CourierStatus, ShipmentRow } from './index';
+import type { Courier, CourierStatus, ShipmentRow } from './index.js';
 
 /**
  * A pretend courier for testing the whole automation without a real contract. It books parcels and then

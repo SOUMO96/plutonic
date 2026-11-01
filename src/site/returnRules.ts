@@ -1,4 +1,4 @@
-import { RETURN_WINDOW_DAYS } from './catalog';
+import { RETURN_WINDOW_DAYS } from './catalog.js';
 import type { Order, ReturnReq } from './store';
 
 /**

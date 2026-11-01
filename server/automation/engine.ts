@@ -12,10 +12,10 @@
  * as when a person presses the buttons in the admin.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { activeCourier, type Courier, type CourierStatus, type ShipmentKind, type ShipmentRow } from '../courier';
-import { cashfreeConfigured, createRefund } from '../v1/cashfree';
-import { serviceClient } from '../v1/lib';
-import { exchangeToRefund, log, logOnce, moveReturn, readSettings, setOrderStep } from './core';
+import { activeCourier, type Courier, type CourierStatus, type ShipmentKind, type ShipmentRow } from '../courier/index.js';
+import { cashfreeConfigured, createRefund } from '../v1/cashfree.js';
+import { serviceClient } from '../v1/lib.js';
+import { exchangeToRefund, log, logOnce, moveReturn, readSettings, setOrderStep } from './core.js';
 import type { Order, ReturnReq } from '../../src/site/store';
 
 let running = false;

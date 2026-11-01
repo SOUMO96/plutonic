@@ -12,7 +12,7 @@
  */
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { adminDb } from './supabaseAdmin';
+import { adminDb } from './supabaseAdmin.js';
 
 export const COOKIE_NAME = 'pl_admin';
 export const SESSION_SECONDS = 60 * 60 * 8; // 8 hours, absolute (no sliding renewal)

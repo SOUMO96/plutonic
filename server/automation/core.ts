@@ -3,7 +3,7 @@
  * robot always apply exactly the same rules and side effects (stock, refunds, history).
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { applyUpdate, type Update } from '../../src/site/returnRules';
+import { applyUpdate, type Update } from '../../src/site/returnRules.js';
 import type { Order, ReturnReq } from '../../src/site/store';
 
 export type Level = 'info' | 'review' | 'error';

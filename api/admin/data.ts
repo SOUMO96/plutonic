@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { requireAdmin, send } from '../_lib/adminAuth';
-import { adminDb } from '../_lib/supabaseAdmin';
-import { readSettings } from '../../server/automation/core';
-import { activeCourier } from '../../server/courier';
+import { requireAdmin, send } from '../_lib/adminAuth.js';
+import { adminDb } from '../_lib/supabaseAdmin.js';
+import { readSettings } from '../../server/automation/core.js';
+import { activeCourier } from '../../server/courier/index.js';
 
 /** GET /api/admin/data — everything the dashboard shows. Administrator session required. */
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
