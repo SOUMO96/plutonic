@@ -197,6 +197,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [adminStatus, setAdminStatus] = useState<AdminStatus>('idle');
   const [authReady, setAuthReady] = useState(!isLive);
   const uid = useRef<string | null>(null);
+  const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
+  const refreshRef = useRef<() => void>(() => undefined);
   const hydrateRef = useRef<((u: { id: string; email?: string | null; created_at?: string }) => Promise<void>) | null>(null);
 
   const loadCatalog = useCallback(async () => {
@@ -217,6 +219,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const hydrate = async (u: { id: string; email?: string | null; created_at?: string }) => {
       uid.current = u.id;
+      // Live push: when the admin changes one of this customer's orders, returns or refunds, refresh straight away.
+      if (!channelRef.current) {
+        let t = 0;
+        channelRef.current = db.channel('account-' + u.id)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'returns' }, () => { window.clearTimeout(t); t = window.setTimeout(() => refreshRef.current(), 150); })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { window.clearTimeout(t); t = window.setTimeout(() => refreshRef.current(), 150); })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'refunds' }, () => { window.clearTimeout(t); t = window.setTimeout(() => refreshRef.current(), 150); })
+          .subscribe();
+      }
       const [prof, addr, wish, ord, ret, rev, ref] = await Promise.all([
         db.from('profiles').select('*').eq('id', u.id).maybeSingle(),
         db.from('addresses').select('id, data').order('created_at'),
@@ -249,7 +260,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Defer: calling supabase from inside this callback can deadlock the auth lock.
       window.setTimeout(() => {
         if (session) void hydrate(session.user);
-        else { uid.current = null; setState((s) => ({ ...s, user: null, addresses: [], orders: guestOrders(), returns: [], refunds: [] })); }
+        else { uid.current = null; if (channelRef.current) { void db.removeChannel(channelRef.current); channelRef.current = null; } setState((s) => ({ ...s, user: null, addresses: [], orders: guestOrders(), returns: [], refunds: [] })); }
       }, 0);
     });
     return () => sub.subscription.unsubscribe();
@@ -450,6 +461,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const mine = (ord.data ?? []).map((r) => r.data as Order);
     setState((s) => ({ ...s, orders: [...mine, ...s.orders.filter((o) => !mine.some((m) => m.id === o.id))], returns: (ret.data ?? []).map((r) => r.data as ReturnReq), refunds: ((ref.data ?? []) as RefundRow[]).map(rowToRefund) }));
   }, []);
+  useEffect(() => { refreshRef.current = () => { void refreshAccount(); }; }, [refreshAccount]);
   const lookupOrder: Store['lookupOrder'] = async (id, email) => {
     if (!supabase) return null;
     const { data } = await supabase.rpc('track_order', { p_id: id, p_email: email });

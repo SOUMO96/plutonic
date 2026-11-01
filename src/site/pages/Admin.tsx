@@ -236,7 +236,7 @@ export default function Admin() {
   const { refreshAdmin } = s;
   useEffect(() => {
     const tick = () => { if (!document.hidden) void refreshAdmin(); };
-    const t = window.setInterval(tick, 20_000); document.addEventListener('visibilitychange', tick);
+    const t = window.setInterval(tick, 8_000); document.addEventListener('visibilitychange', tick);
     return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', tick); };
   }, [refreshAdmin]);
   const [sec, setSec] = useState<Section>('Overview');

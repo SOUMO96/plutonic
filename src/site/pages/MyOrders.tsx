@@ -173,11 +173,11 @@ function OrderWidget({ o }: { o: Order }) {
 export function MyOrders({ route }: { route: Route }) {
   const { orders, refreshAccount } = useStore();
   const focus = route.query.get('order');
-  // Keep this page in step with the server: when the admin approves, schedules or ships, it shows here by itself.
+  // Keep this page in step with the server: when the admin approves, schedules or ships, it shows here by itself (live push, with a 4-second check as backup).
   useEffect(() => {
     void refreshAccount();
     const tick = () => { if (!document.hidden) void refreshAccount(); };
-    const t = window.setInterval(tick, 15_000); document.addEventListener('visibilitychange', tick);
+    const t = window.setInterval(tick, 4_000); document.addEventListener('visibilitychange', tick);
     return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', tick); };
   }, [refreshAccount]);
   const list = [...orders].sort((a, b) => b.createdAt - a.createdAt);
