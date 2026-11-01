@@ -660,6 +660,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const auth: Auth = {
     signUp: async ({ email, password, firstName, lastName, mobile, fit }) => {
       if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
+      // Testing phase: the shop creates the account already confirmed and signs the customer straight in (no emailed code).
+      const cfg = await getJson<{ features?: { instantSignup?: boolean } }>('/api/v1/config', 4000);
+      if (cfg?.features?.instantSignup) {
+        let resp: Response; let body: { error?: { message?: string } } = {};
+        try { resp = await fetch('/api/v1/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, firstName, lastName, mobile }) }); body = await resp.json().catch(() => ({})); }
+        catch { return { ok: false, message: 'We could not reach the shop. Please try again.' }; }
+        if (!resp.ok) return { ok: false, message: resp.status === 429 ? 'Too many sign-ups from this connection. Please try again in a minute.' : body.error?.message ?? 'We could not create your account.' };
+        const si = await supabase.auth.signInWithPassword({ email, password });
+        if (si.error || !si.data.user) return { ok: true, message: 'Account created. Please log in.' };
+        await hydrateRef.current?.(si.data.user);
+        if (fit) run(supabase.from('profiles').update({ fit }).eq('id', si.data.user.id));
+        return { ok: true, message: 'Account created' };
+      }
       const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { first_name: firstName, last_name: lastName, mobile } } });
       if (error) return { ok: false, message: /rate limit/i.test(error.message) ? 'We are sending a lot of sign-up emails right now. Please try again in a few minutes.' : error.message };
       if (data.session && data.user) await hydrateRef.current?.(data.user);
