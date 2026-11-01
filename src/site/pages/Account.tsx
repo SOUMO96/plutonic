@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { inr } from '../catalog';
+import { STATES } from '../pincode';
+import { usePinHint } from '../usePin';
 import { MyOrders } from './MyOrders';
 import { parseW } from '../wishlist';
 import { go, Link, type Route } from '../router';
@@ -168,17 +170,18 @@ function SignedOut({ route }: { route: Route }) {
 function AddressForm({ initial, onDone }: { initial?: Address; onDone: () => void }) {
   const { saveAddress, say } = useStore();
   const [a, setA] = useState<Omit<Address, 'id'> & { id?: string }>(initial ?? { label: 'Home', name: '', mobile: '', line1: '', line2: '', landmark: '', pin: '', city: '', state: '' });
+  const pinHint = usePinHint(a.pin, (r, auto) => setA((p) => ({ ...p, state: r.state, city: !p.city || p.city === auto ? r.city : p.city })));
   return (
-    <form className="panel tab-enter" onSubmit={(e) => { e.preventDefault(); if (a.name.length < 2 || a.line1.length < 3 || !/^[1-9]\d{5}$/.test(a.pin) || !a.city) { say('Please complete name, address, city and a 6-digit PIN.'); return; } saveAddress(a); onDone(); }}>
+    <form className="panel tab-enter" onSubmit={(e) => { e.preventDefault(); if (a.name.length < 2 || a.line1.length < 3 || !/^[1-9]\d{5}$/.test(a.pin) || !a.city || !a.state) { say('Please complete name, address, PIN code, city and state.'); return; } if (pinHint.kind === 'missing') { say('We could not find that PIN code. Please check it.'); return; } saveAddress(a); onDone(); }}>
       <div className="fgrid">
         <label>Label<select value={a.label} onChange={(e) => setA({ ...a, label: e.target.value })}><option>Home</option><option>Work</option><option>Other</option></select></label>
         <label>Full name<input value={a.name} onChange={(e) => setA({ ...a, name: e.target.value })} /></label>
         <label>Mobile<input inputMode="numeric" maxLength={10} value={a.mobile} onChange={(e) => setA({ ...a, mobile: e.target.value.replace(/\D/g, '') })} /></label>
         <label className="span2">Flat, house, building<input value={a.line1} onChange={(e) => setA({ ...a, line1: e.target.value })} /></label>
         <label>Area, street<input value={a.line2} onChange={(e) => setA({ ...a, line2: e.target.value })} /></label>
-        <label>PIN code<input inputMode="numeric" maxLength={6} value={a.pin} onChange={(e) => setA({ ...a, pin: e.target.value.replace(/\D/g, '') })} /></label>
-        <label>City<input value={a.city} onChange={(e) => setA({ ...a, city: e.target.value })} /></label>
-        <label>State<input value={a.state} onChange={(e) => setA({ ...a, state: e.target.value })} /></label>
+        <label>PIN code<input inputMode="numeric" maxLength={6} value={a.pin} onChange={(e) => setA({ ...a, pin: e.target.value.replace(/\D/g, '') })} autoComplete="postal-code" />{pinHint.text && <small className={'pin-hint pin-hint--' + pinHint.kind}>{pinHint.text}</small>}</label>
+        <label>City<input value={a.city} onChange={(e) => setA({ ...a, city: e.target.value })} autoComplete="address-level2" /></label>
+        <label>State<select value={a.state} onChange={(e) => setA({ ...a, state: e.target.value })}><option value="">Select state</option>{STATES.map((x) => <option key={x}>{x}</option>)}</select></label>
       </div>
       <div className="row-gap"><button className="btn btn--dark btn--sm" type="submit">Save address</button><button className="btn btn--ghost btn--sm" type="button" onClick={onDone}>Cancel</button></div>
     </form>

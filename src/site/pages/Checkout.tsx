@@ -6,7 +6,8 @@ import { LOGO, Photo } from '../ui';
 import { payConfig, payWithCashfree, verifyPayment } from '../payments';
 import { deliveryLine, OrderSummary } from './MyOrders';
 
-const STATES = ['Karnataka', 'Maharashtra', 'Delhi', 'Tamil Nadu', 'Telangana', 'Gujarat', 'West Bengal', 'Uttar Pradesh', 'Rajasthan', 'Kerala'];
+import { STATES } from '../pincode';
+import { usePinHint } from '../usePin';
 const eta = (days: number) => new Date(Date.now() + days * 86_400_000).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 type Pay = Order['payment'];
 
@@ -21,6 +22,8 @@ export default function Checkout() {
   const [mobile, setMobile] = useState(user?.mobile ?? '');
   const [saved, setSaved] = useState(addresses[0]?.id ?? 'new');
   const [a, setA] = useState({ name: user ? `${user.firstName} ${user.lastName}`.trim() : '', mobile: user?.mobile ?? '', line1: '', line2: '', landmark: '', pin: '', city: '', state: '' });
+  // typing the PIN code fills in the state (and the city, if it is still empty)
+  const pinHint = usePinHint(a.pin, (r, auto) => setA((p) => ({ ...p, state: r.state, city: !p.city || p.city === auto ? r.city : p.city })));
   const [delivery, setDelivery] = useState<'standard' | 'express'>('standard');
   const [pay, setPay] = useState<Pay>('upi');
   const [failure, setFailure] = useState('');
@@ -41,6 +44,7 @@ export default function Checkout() {
       if (!/^[6-9]\d{9}$/.test(a.mobile)) e.amobile = 'Enter a 10-digit mobile number.';
       if (a.line1.trim().length < 3) e.line1 = 'Enter your flat, house or building.';
       if (!/^[1-9]\d{5}$/.test(a.pin)) e.pin = 'Enter a 6-digit PIN code.';
+      else if (pinHint.kind === 'missing') e.pin = 'We could not find this PIN code. Please check it.';
       if (!a.city.trim()) e.city = 'Enter your city.';
       if (!a.state) e.state = 'Select your state.';
     }
@@ -91,7 +95,7 @@ export default function Checkout() {
                 <label className="span2">Flat, house, building<input value={a.line1} onChange={(e) => setA({ ...a, line1: e.target.value })} autoComplete="address-line1" {...inv('line1')} />{err('line1')}</label>
                 <label>Area, street<input value={a.line2} onChange={(e) => setA({ ...a, line2: e.target.value })} autoComplete="address-line2" /></label>
                 <label>Landmark (optional)<input value={a.landmark} onChange={(e) => setA({ ...a, landmark: e.target.value })} /></label>
-                <label>PIN code<input inputMode="numeric" maxLength={6} value={a.pin} onChange={(e) => setA({ ...a, pin: e.target.value.replace(/\D/g, '') })} autoComplete="postal-code" {...inv('pin')} />{err('pin')}</label>
+                <label>PIN code<input inputMode="numeric" maxLength={6} value={a.pin} onChange={(e) => setA({ ...a, pin: e.target.value.replace(/\D/g, '') })} autoComplete="postal-code" {...inv('pin')} />{err('pin')}{pinHint.text && <small className={'pin-hint pin-hint--' + pinHint.kind}>{pinHint.text}</small>}</label>
                 <label>City<input value={a.city} onChange={(e) => setA({ ...a, city: e.target.value })} autoComplete="address-level2" {...inv('city')} />{err('city')}</label>
                 <label>State<select value={a.state} onChange={(e) => setA({ ...a, state: e.target.value })} {...inv('state')}><option value="">Select state</option>{STATES.map((s) => <option key={s}>{s}</option>)}</select>{err('state')}</label>
               </div>

@@ -4,6 +4,7 @@ import { ApiError, bearer, clientFor, clientIp, dbFail, limit, limitShared, read
 import { cashfreeConfigured, cashfreeMode, createSession, fetchSettlement, verifyWebhookSignature } from './cashfree.js';
 import { applyCourierEvent, tick } from '../automation/engine.js';
 import { courierByName, type ShipmentRow } from '../courier/index.js';
+import { normaliseState, stateFromPin } from '../../src/site/pincode.js';
 
 type Result = unknown | { __status: number; body: unknown };
 type Handler = (c: Ctx) => Promise<Result>;
@@ -102,6 +103,30 @@ add('POST', '/reviews', 'required', async (c) => {
   const r = must(await c.db.from('reviews').insert({ product_id: b.productId, user_id: u.id, name: b.name, rating: b.rating, body: b.text, size: String(b.size ?? '').slice(0, 10), fit: String(b.fit ?? '').slice(0, 40) }).select('id, status').single());
   return created(r);
 }, { bucket: 'write', max: 20 });
+
+// PIN code -> state and city. Asks India Post's public PIN directory (answers are cached for an hour) and falls back to a built-in
+// table of PIN prefixes if the directory is slow or down, so checkout never waits on it.
+add('GET', '/pincode/:pin', 'none', async ({ params }) => {
+  const pin = params.pin;
+  if (!/^[1-9]\d{5}$/.test(pin)) throw new ApiError(400, 'invalid', 'A PIN code has 6 digits.');
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 4000);
+    const r = await fetch('https://api.postalpincode.in/pincode/' + pin, { signal: ctl.signal }); clearTimeout(t);
+    const j = (await r.json()) as Array<{ Status?: string; PostOffice?: Array<{ State?: string; District?: string; Block?: string; Name?: string }> }>;
+    const rec = Array.isArray(j) ? j[0] : undefined;
+    if (rec?.Status === 'Success' && rec.PostOffice?.length) {
+      const po = rec.PostOffice[0];
+      const block = po.Block && po.Block !== 'NA' ? po.Block : '';
+      // India Post's own list still files Ladakh's PINs under Jammu and Kashmir, so our table wins for those
+      const own = stateFromPin(pin);
+      return { pin, state: own === 'Ladakh' ? 'Ladakh' : normaliseState(po.State) || own, city: block || po.District || '', district: po.District ?? '', source: 'post' };
+    }
+    if (rec?.Status === 'Error' || rec?.Status === '404') throw new ApiError(404, 'not_found', 'No such PIN code.');
+  } catch (e) { if (e instanceof ApiError) throw e; /* the directory is down: use the built-in table */ }
+  const state = stateFromPin(pin);
+  if (!state) throw new ApiError(404, 'not_found', 'No such PIN code.');
+  return { pin, state, city: '', district: '', source: 'estimate' };
+}, { bucket: 'pincode', max: 60, cache: 'public, s-maxage=3600, stale-while-revalidate=86400' });
 
 // ------------------------------------------------------------------ account
 // Create an account that is already active, so the customer never waits for an emailed code (testing phase).
