@@ -21,7 +21,7 @@ import { AdminGuard, AdminLogin } from './pages/AdminAccess';
 
 const DARK = new Set(['', 'men', 'about']);
 /** Elements that ease in as they scroll into view. */
-const REVEAL = '.card, .tile, .edit, .split-tile, .sec-head, .support-card, .values > div, .fabrics > *, .layers > *, .news, .philosophy > *, .about-grid > *, .help-tile, .rev, .line, .panel, .co-form section, .timeline li';
+const REVEAL = '.card, .tile, .edit, .split-tile, .sec-head, .support-card, .values > div, .fabrics > *, .layers > *, .news, .philosophy > *, .about-grid > *, .help-tile, .rev, .line, .panel, .co-form section';
 
 /**
  * Adds `is-in` to reveal targets once they approach the viewport. Content stays visible without JS or with

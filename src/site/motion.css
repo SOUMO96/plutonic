@@ -213,3 +213,8 @@
 /* Wishlist page: breathing room above the footer */
 .wish-page { padding-bottom: clamp(72px, 10vw, 140px); }
 .wl-title b { white-space: nowrap; flex: none; } .wl-title span { min-width: 0; }
+
+/* Tracker steps are never part of the scroll-reveal fade: done steps are solid, pending steps are clearly readable but lighter */
+.tracker .timeline li { opacity: .7; filter: none; transform: none; }
+.tracker .timeline li.done { opacity: 1; }
+.tracker .timeline li:not(.done) .dotc { background: #E9E6DF; }
