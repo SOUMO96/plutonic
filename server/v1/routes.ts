@@ -119,7 +119,7 @@ add('POST', '/auth/signup', 'none', async (c) => {
     throw new ApiError(422, 'rejected', 'We could not create that account. Check the email address and try again.');
   }
   return created({ ok: true });
-}, { bucket: 'signup', max: 6 });
+}, { bucket: 'signup', max: 20 });
 add('GET', '/me', 'required', async (c) => {
   const u = await c.user();
   const p = must(await c.db.from('profiles').select('*').eq('id', u.id).maybeSingle()) as any;
