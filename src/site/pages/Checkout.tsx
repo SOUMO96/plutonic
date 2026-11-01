@@ -4,6 +4,7 @@ import { go, Link, type Route } from '../router';
 import { useStore, type Address, type Order } from '../store';
 import { LOGO, Photo } from '../ui';
 import { payConfig, payWithCashfree, verifyPayment } from '../payments';
+import { OrderBill } from './MyOrders';
 
 const STATES = ['Karnataka', 'Maharashtra', 'Delhi', 'Tamil Nadu', 'Telangana', 'Gujarat', 'West Bengal', 'Uttar Pradesh', 'Rajasthan', 'Kerala'];
 const eta = (days: number) => new Date(Date.now() + days * 86_400_000).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -165,8 +166,7 @@ export function Confirmation({ route }: { route: Route }) {
       <span className="check-draw" aria-hidden="true"><svg viewBox="0 0 52 52" width="56" height="56" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="26" cy="26" r="24" /><path d="M15 27l8 8 15-17" /></svg></span><span className="lbl muted">Order confirmed · demonstration</span><h1 className="h1">Thank you.</h1>
       <p className="body">Your order <b>#{o.id}</b> is confirmed.{o.paymentStatus === 'paid' ? ' Payment received.' : ''}{o.paymentStatus === 'paid' || o.paymentStatus === 'cod' ? '' : ` A confirmation has been sent to ${o.email}. This is a demonstration order: the payment was simulated, and nothing was charged, packed or shipped.`}</p>
       <div className="confirm-card">
-        <ul className="co-items">{o.items.map((i) => <li key={i.productId + i.size + i.colourId} className={i.cancelled ? 'is-cancelled' : undefined}><span><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span>{inr(i.price * i.qty)}</span></li>)}</ul>
-        <div className="sum-total"><b>{o.payment === 'cod' ? 'Total to pay' : 'Total paid'}</b><b>{inr(o.total)}</b></div>
+        <OrderBill o={o} />
         <p className="muted small">Shipping to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state} · {o.payment === 'cod' ? 'Pay on delivery' : 'Payment confirmed'}</p>
       </div>
       <div className="row-gap"><Link className="btn btn--dark" to={'/account?tab=orders&order=' + o.id}>Track order</Link><Link className="btn btn--ghost" to="/shop">Continue shopping</Link></div>

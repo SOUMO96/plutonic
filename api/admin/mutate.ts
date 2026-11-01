@@ -12,7 +12,7 @@ import type { ReturnReq } from '../../src/site/store';
  */
 const str = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 && v.length <= max;
 const int = (v: unknown, min = 0, max = 10_000_000) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
-const RETURN_STATUS = ['Requested', 'Approved', 'Pickup scheduled', 'Picked up', 'Completed', 'Rejected'];
+const RETURN_STATUS = ['Requested', 'Approved', 'Pickup scheduled', 'Picked up', 'Replacement packed', 'Replacement shipped', 'Replacement out for delivery', 'Completed', 'Rejected'];
 const REVIEW_STATUS = ['Published', 'Pending', 'Hidden'];
 
 function validProduct(p: any): string | null {
@@ -93,23 +93,31 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       if ('error' in upd) return send(res, 409, { error: 'invalid_transition', message: upd.error });
       const { data: ord } = await db.from('orders').select('data').eq('id', row.order_id).maybeSingle();
       const item = ord?.data?.items?.[r.itemIndex ?? -1];
-      // An exchange can only be approved while the replacement size is in stock.
-      if (b.status === 'Approved' && r.kind === 'exchange' && r.exchangeTo) {
-        const { data: prod } = await db.from('products').select('data').eq('id', r.productId).maybeSingle();
-        const have = prod?.data?.stock?.[`${r.exchangeTo.colourId}:${r.exchangeTo.size}`] ?? 0;
-        if (have < (r.qty ?? 1)) return send(res, 409, { error: 'replacement_out_of_stock', message: `Size ${r.exchangeTo.size} in ${r.exchangeTo.colourName} is out of stock, so this exchange cannot be approved.` });
+      const piece = r.piece ?? (item ? { colourId: item.colourId, size: item.size } : undefined);   // the size/colour the customer is sending back
+      const qty = r.qty ?? item?.qty ?? 1;
+      const stockOf = async (colourId: string, size: string) => { const { data: prod } = await db.from('products').select('data').eq('id', r.productId).maybeSingle(); return prod?.data?.stock?.[`${colourId}:${size}`] ?? 0; };
+      // An exchange can only move forward while the replacement size is in stock (checked early, and again when it is packed).
+      if ((b.status === 'Approved' || b.status === 'Replacement packed') && r.kind === 'exchange' && r.exchangeTo) {
+        if ((await stockOf(r.exchangeTo.colourId, r.exchangeTo.size)) < qty) return send(res, 409, { error: 'replacement_out_of_stock', message: `Size ${r.exchangeTo.size} is out of stock, so this exchange cannot go ahead.` });
       }
       // Move the status first (only if nobody changed it meanwhile), then apply side effects once.
       const { data: moved, error: e2 } = await db.from('returns').update({ status: b.status, data: upd.ret }).eq('id', b.id).eq('status', row.status).select('id');
       if (e2) return dbErr(); if (!moved?.length) return send(res, 409, { error: 'changed', message: 'This request was just updated. Refresh and try again.' });
-      if (b.status === 'Completed' && item) {
-        const deltas = [{ productId: item.productId, colourId: item.colourId, size: item.size, delta: r.qty ?? item.qty }];       // returned piece goes back on the shelf
-        if (r.kind === 'exchange' && r.exchangeTo) deltas.push({ productId: item.productId, colourId: r.exchangeTo.colourId, size: r.exchangeTo.size, delta: -(r.qty ?? item.qty) });   // replacement leaves it
-        const { error: e3 } = await db.rpc('adjust_stock', { p_items: deltas }); if (e3) return dbErr();
-        if (r.kind === 'return' && (r.refundAmount ?? 0) > 0) {
-          const cod = ord?.data?.payment === 'cod';
-          const { error: e4 } = await db.from('refunds').insert({ order_id: row.order_id, return_id: r.id, source: 'return', amount: r.refundAmount, note: cod ? 'Cash on delivery order: ask the customer for UPI or bank details' : 'Return completed' });
-          if (e4) return dbErr();
+      if (item && piece) {
+        // Exchange: when the replacement is packed, the returned piece goes back on the shelf and the replacement leaves it.
+        if (b.status === 'Replacement packed' && r.exchangeTo) {
+          const { error: e3 } = await db.rpc('adjust_stock', { p_items: [{ productId: item.productId, colourId: piece.colourId, size: piece.size, delta: qty }, { productId: item.productId, colourId: r.exchangeTo.colourId, size: r.exchangeTo.size, delta: -qty }] });
+          if (e3) return dbErr();
+        }
+        // Return: when completed, the piece goes back on the shelf and the refund is recorded.
+        if (b.status === 'Completed' && r.kind === 'return') {
+          const { error: e3 } = await db.rpc('adjust_stock', { p_items: [{ productId: item.productId, colourId: piece.colourId, size: piece.size, delta: qty }] });
+          if (e3) return dbErr();
+          if ((r.refundAmount ?? 0) > 0) {
+            const cod = ord?.data?.payment === 'cod';
+            const { error: e4 } = await db.from('refunds').insert({ order_id: row.order_id, return_id: r.id, source: 'return', amount: r.refundAmount, note: cod ? 'Cash on delivery order: ask the customer for UPI or bank details' : 'Return completed' });
+            if (e4) return dbErr();
+          }
         }
       }
       return send(res, 200, { ok: true, request: upd.ret });

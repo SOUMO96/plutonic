@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES, COLOURS, inr, totalStock, type Gender, type Product } from '../catalog';
 import { Link } from '../router';
 import { ORDER_STEPS, useStore, type Coupon, type Order, type ReturnReq } from '../store';
-import { NEXT_STATUS, PICKUP_SLOTS } from '../returnRules';
+import { actionLabel, nextStatuses, PICKUP_SLOTS, stepLabel } from '../returnRules';
 import { isOnline, itemRefund } from '../orderCancel';
 import { LOGO, Photo } from '../ui';
 import { adminSignOut } from './AdminAccess';
@@ -116,7 +116,7 @@ function ReturnCard({ r }: { r: ReturnReq }) {
     setBusy(false);
     if (!res.ok) setMsg(res.message); else setNote('');
   };
-  const next = NEXT_STATUS[r.status];
+  const next = nextStatuses(r);
   return (
     <div className="rcard">
       <div className="rcard-top">
@@ -124,19 +124,22 @@ function ReturnCard({ r }: { r: ReturnReq }) {
         <span className={'status' + (r.status === 'Rejected' ? ' status--bad' : r.status === 'Requested' ? ' status--info' : '')}>{r.status}</span>
       </div>
       <p className="small">Reason: <b>{r.reason}</b>{r.note ? ` · “${r.note}”` : ''}</p>
-      {r.kind === 'exchange' && r.exchangeTo && <p className="small">Customer wants: <b>{r.exchangeTo.colourName} · {r.exchangeTo.size}</b> instead of {r.variant}</p>}
+      {r.kind === 'exchange' && r.exchangeTo && <p className="small">Customer wants size <b>{r.exchangeTo.size}</b> instead of <b>{r.piece?.size ?? r.variant}</b> (same colour: {r.exchangeTo.colourName}). One exchange per item.</p>}
       {r.kind === 'return' && <p className="small">Refund when completed: <b>{inr(r.refundAmount ?? 0)}</b>{o?.payment === 'cod' ? ' · cash on delivery: ask for UPI/bank details' : ''}</p>}
       {r.pickupDate && <p className="small">Pickup: <b>{new Date(r.pickupDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}, {r.pickupSlot}</b></p>}
-      <ol className="rcard-hist">{(r.history ?? []).map((h, i) => <li key={i}><b>{h.status}</b> <span className="muted small">{fmt(h.at)}</span></li>)}</ol>
+      <ol className="rcard-hist">{(r.history ?? []).map((h, i) => <li key={i}><b>{stepLabel(r.kind, h.status)}</b> <span className="muted small">{fmt(h.at)}</span></li>)}</ol>
       {next.length > 0 && (
         <div className="rcard-act">
           {next.includes('Pickup scheduled') && <div className="row-gap"><label className="small">Pickup date<input type="date" value={date} min={todayISO()} onChange={(e) => setDate(e.target.value)} /></label><label className="small">Time slot<select value={slot} onChange={(e) => setSlot(e.target.value)}>{PICKUP_SLOTS.map((x) => <option key={x}>{x}</option>)}</select></label></div>}
           <label className="small">Message to the customer {next.includes('Rejected') ? '(required to reject)' : '(optional)'}<input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Shown on their order" /></label>
           <div className="row-gap">
-            {next.includes('Approved') && <button type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => go_('Approved')}>Approve</button>}
-            {next.includes('Pickup scheduled') && <button type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => go_('Pickup scheduled')}>Schedule pickup</button>}
-            {next.includes('Picked up') && <button type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => go_('Picked up')}>Mark picked up</button>}
-            {next.includes('Completed') && <button type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => window.confirm(r.kind === 'return' ? `Item received. This puts it back in stock and records a refund of ${inr(r.refundAmount ?? 0)}. Continue?` : 'Replacement is being sent. This swaps the stock (returned size back in, replacement out). Continue?') && go_('Completed')}>{r.kind === 'return' ? 'Complete · record refund' : 'Complete · send replacement'}</button>}
+            {next.filter((x) => x !== 'Rejected').map((x) => (
+              <button key={x} type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => {
+                if (x === 'Completed' && r.kind === 'return' && !window.confirm(`Item received. This puts it back in stock and records a refund of ${inr(r.refundAmount ?? 0)}. Continue?`)) return;
+                if (x === 'Replacement packed' && !window.confirm('Packing the replacement swaps the stock: the returned size goes back in, the replacement size goes out. Continue?')) return;
+                void go_(x);
+              }}>{actionLabel(r.kind, x)}</button>
+            ))}
             {next.includes('Rejected') && <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => go_('Rejected')}>Reject</button>}
           </div>
           {msg && <p className="err small" role="alert">{msg}</p>}
@@ -155,7 +158,7 @@ function ReturnsPanel() {
       <div className="seg" role="tablist" aria-label="Show">{([['open', 'Needs action'], ['done', 'Finished'], ['all', 'All']] as const).map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={f === k} onClick={() => setF(k)}>{l}</button>)}</div>
       {list.length === 0 && <p className="muted">Nothing here.</p>}
       {list.map((r) => <ReturnCard key={r.id} r={r} />)}
-      <p className="muted small">Flow: Requested, Approved, Pickup scheduled, Picked up, Completed. Customers see each step, the pickup date and your message on their order. Completing a return puts the item back in stock and adds a line to <b>Refunds</b>; completing an exchange swaps the stock.</p>
+      <p className="muted small">Returns: Requested, Approved, Pickup scheduled, Picked up, Completed (refund recorded). Exchanges: after pickup, the replacement gets its own steps: packed (stock swaps), shipped, out for delivery, delivered. Customers see every step, the pickup date and your message on the same order tracking. An item can be exchanged once; after that it can only be returned.</p>
     </section>
   );
 }

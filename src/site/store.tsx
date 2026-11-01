@@ -4,7 +4,7 @@ import {
   type Product,
 } from './catalog';
 import { cancelItem as cancelItemRule, cancelWhole as cancelWholeRule, type Cancelled } from './orderCancel';
-import { applyUpdate, requestError, type Update } from './returnRules';
+import { applyUpdate, currentPiece, requestError, type Update } from './returnRules';
 import { isLive, supabase } from './supabase';
 
 /**
@@ -35,11 +35,13 @@ export type Order = {
 };
 export type ReturnReq = {
   id: string; orderId: string; productName: string; variant: string; kind: 'exchange' | 'return'; reason: string; note: string;
-  status: 'Requested' | 'Approved' | 'Pickup scheduled' | 'Picked up' | 'Completed' | 'Rejected'; createdAt: number;
+  status: 'Requested' | 'Approved' | 'Pickup scheduled' | 'Picked up' | 'Replacement packed' | 'Replacement shipped' | 'Replacement out for delivery' | 'Completed' | 'Rejected'; createdAt: number;
   /** Which line of the order this covers (one open request per line). */
   itemIndex?: number; productId?: string; qty?: number;
   /** Exchanges: the size/colour the customer wants instead. */
   exchangeTo?: { colourId: string; colourName: string; size: string };
+  /** The piece the customer holds for this item when asking (the original, or a replacement from an earlier exchange). */
+  piece?: { colourId: string; colourName: string; size: string };
   /** Returns: what is owed back once the item is received. */
   refundAmount?: number;
   pickupDate?: string; pickupSlot?: string; adminNote?: string;
@@ -117,7 +119,7 @@ function initial(): Persisted {
 type Result = { ok: boolean; message: string };
 export type AdminStatus = 'idle' | 'loading' | 'ready' | 'error';
 type AdminData = { products: Product[]; orders: Order[]; returns: ReturnReq[]; refunds: Refund[]; reviews: Review[]; coupons: Coupon[] };
-export type NewReturn = { orderId: string; itemIndex: number; kind: 'exchange' | 'return'; reason: string; note: string; exchangeSize?: string; exchangeColour?: string };
+export type NewReturn = { orderId: string; itemIndex: number; kind: 'exchange' | 'return'; reason: string; note: string; exchangeSize?: string };
 export type Auth = {
   signUp: (p: { email: string; password: string; firstName: string; lastName: string; mobile: string; fit?: string }) => Promise<Result & { needsConfirm?: boolean }>;
   signIn: (email: string, password: string) => Promise<Result & { needsConfirm?: boolean }>;
@@ -150,6 +152,8 @@ export type Store = {
   /** Administrator: move a request along (approve, schedule pickup, picked up, complete, reject). */
   updateReturn: (id: string, status: ReturnReq['status'], u?: Update) => Promise<{ ok: boolean; message: string }>;
   markRefunded: (id: number | string, reference: string) => Promise<boolean>;
+  /** Customer: fetch the latest order / return / refund status from the server. */
+  refreshAccount: () => Promise<void>;
   reviews: Review[]; addReview: (r: Omit<Review, 'id' | 'createdAt' | 'status'>) => void; setReviewStatus: (id: string, s: Review['status']) => void;
   user: User | null; signIn: (u: Omit<User, 'since'>) => void; signOut: () => void; updateUser: (u: Partial<User>) => void;
   addresses: Address[]; saveAddress: (a: Omit<Address, 'id'> & { id?: string }) => void; removeAddress: (id: string) => void;
@@ -433,6 +437,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const refunds = owed > 0 ? [{ id: 'RF-' + (s.refunds.length + 1), orderId: before.id, source: 'cancellation' as const, amount: owed, status: 'Pending' as const, note, createdAt: Date.now() }, ...s.refunds] : s.refunds;
     return { ...s, edits, refunds, orders: s.orders.map((o) => (o.id === before.id ? result.order : o)) };
   });
+  /** Pull the signed-in customer's latest orders, return requests and refunds, so admin changes show up on their own. */
+  const refreshAccount = useCallback(async () => {
+    if (!supabase || !uid.current) return;
+    const db = supabase;
+    const [ord, ret, ref] = await Promise.all([
+      db.from('orders').select('data').order('created_at', { ascending: false }),
+      db.from('returns').select('data').order('created_at', { ascending: false }),
+      db.from('refunds').select('*').order('created_at', { ascending: false }),
+    ]);
+    if (ord.error || ret.error || ref.error) return;
+    const mine = (ord.data ?? []).map((r) => r.data as Order);
+    setState((s) => ({ ...s, orders: [...mine, ...s.orders.filter((o) => !mine.some((m) => m.id === o.id))], returns: (ret.data ?? []).map((r) => r.data as ReturnReq), refunds: ((ref.data ?? []) as RefundRow[]).map(rowToRefund) }));
+  }, []);
   const lookupOrder: Store['lookupOrder'] = async (id, email) => {
     if (!supabase) return null;
     const { data } = await supabase.rpc('track_order', { p_id: id, p_email: email });
@@ -451,19 +468,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // Browser demo: same rules as the database function
     const o = state.orders.find((x) => x.id === r.orderId);
     if (!o) return { ok: false, message: 'Order not found.' };
-    const bad = requestError(o, r.itemIndex, state.returns);
+    const bad = requestError(o, r.itemIndex, state.returns, r.kind);
     if (bad) return { ok: false, message: bad };
     if (r.reason.trim().length < 2) return { ok: false, message: 'Choose a reason.' };
-    const it = o.items[r.itemIndex]; let exchangeTo: ReturnReq['exchangeTo'];
+    const it = o.items[r.itemIndex]; const piece = currentPiece(o, r.itemIndex, state.returns); let exchangeTo: ReturnReq['exchangeTo'];
     if (r.kind === 'exchange') {
-      const p = allProducts.find((x) => x.id === it.productId); const colourId = r.exchangeColour || it.colourId;
+      const p = allProducts.find((x) => x.id === it.productId);
       if (!r.exchangeSize) return { ok: false, message: 'Choose the size you want instead.' };
-      if (r.exchangeSize === it.size && colourId === it.colourId) return { ok: false, message: 'Choose a different size or colour to exchange to.' };
-      if (!p || sizeStock(p, colourId, r.exchangeSize) < it.qty) return { ok: false, message: `Size ${r.exchangeSize} in that colour is not in stock right now. Choose another, or request a return.` };
-      exchangeTo = { colourId, colourName: p.colours.find((c) => c.id === colourId)?.name ?? colourId, size: r.exchangeSize };
+      if (r.exchangeSize === piece.size) return { ok: false, message: 'Choose a different size to exchange to.' };
+      if (!p || sizeStock(p, piece.colourId, r.exchangeSize) < it.qty) return { ok: false, message: `Size ${r.exchangeSize} is not in stock right now. Choose another size, or request a return.` };
+      exchangeTo = { colourId: piece.colourId, colourName: piece.colourName, size: r.exchangeSize };   // same colour only
     }
     const line = it.price * it.qty; const share = o.subtotal > 0 ? Math.round((o.discount * line) / o.subtotal) : 0; const now = Date.now();
-    const request: ReturnReq = { id: 'R-' + (1001 + state.returns.length), orderId: o.id, itemIndex: r.itemIndex, productId: it.productId, productName: it.name, variant: `${it.colourName} · ${it.size}`, qty: it.qty, kind: r.kind, reason: r.reason, note: r.note, exchangeTo, refundAmount: r.kind === 'return' ? line - share : 0, status: 'Requested', createdAt: now, history: [{ status: 'Requested', at: now }] };
+    const request: ReturnReq = { id: 'R-' + (1001 + state.returns.length), orderId: o.id, itemIndex: r.itemIndex, productId: it.productId, productName: it.name, variant: `${piece.colourName} · ${piece.size}`, piece, qty: it.qty, kind: r.kind, reason: r.reason, note: r.note, exchangeTo, refundAmount: r.kind === 'return' ? line - share : 0, status: 'Requested', createdAt: now, history: [{ status: 'Requested', at: now }] };
     setState((s) => ({ ...s, returns: [request, ...s.returns] }));
     return { ok: true, message: 'Request sent', request };
   };
@@ -484,18 +501,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const upd = applyUpdate(cur, status, u);
     if ('error' in upd) { say(upd.error); return { ok: false, message: upd.error }; }
     const o = state.orders.find((x) => x.id === cur.orderId); const item = o?.items[cur.itemIndex ?? -1];
-    if (status === 'Approved' && cur.kind === 'exchange' && cur.exchangeTo && item) {
+    const piece = cur.piece ?? (item ? { colourId: item.colourId, colourName: item.colourName, size: item.size } : undefined);
+    if ((status === 'Approved' || status === 'Replacement packed') && cur.kind === 'exchange' && cur.exchangeTo && item) {
       const p = allProducts.find((x) => x.id === item.productId);
-      if (!p || sizeStock(p, cur.exchangeTo.colourId, cur.exchangeTo.size) < item.qty) { const m = `Size ${cur.exchangeTo.size} is out of stock, so this exchange cannot be approved.`; say(m); return { ok: false, message: m }; }
+      if (!p || sizeStock(p, cur.exchangeTo.colourId, cur.exchangeTo.size) < item.qty) { const m = `Size ${cur.exchangeTo.size} is out of stock, so this exchange cannot go ahead.`; say(m); return { ok: false, message: m }; }
     }
     setState((s) => {
       let edits = s.edits; let refunds = s.refunds;
-      if (status === 'Completed' && item) {
-        edits = { ...s.edits };
-        const bump = (colourId: string, size: string, d: number) => { const p = edits[item.productId] ?? allProducts.find((x) => x.id === item.productId); if (p) edits[item.productId] = { ...p, stock: { ...p.stock, [`${colourId}:${size}`]: Math.max(0, (p.stock[`${colourId}:${size}`] ?? 0) + d) } }; };
-        bump(item.colourId, item.size, item.qty);
-        if (cur.kind === 'exchange' && cur.exchangeTo) bump(cur.exchangeTo.colourId, cur.exchangeTo.size, -item.qty);
-        if (cur.kind === 'return' && (cur.refundAmount ?? 0) > 0) refunds = [{ id: 'RF-' + (s.refunds.length + 1), orderId: cur.orderId, returnId: cur.id, source: 'return', amount: cur.refundAmount ?? 0, status: 'Pending', note: o?.payment === 'cod' ? 'Cash on delivery order: ask the customer for UPI or bank details' : 'Return completed', createdAt: Date.now() }, ...s.refunds];
+      const bump = (colourId: string, size: string, d: number) => { if (!item) return; edits = { ...edits }; const p = edits[item.productId] ?? allProducts.find((x) => x.id === item.productId); if (p) edits[item.productId] = { ...p, stock: { ...p.stock, [`${colourId}:${size}`]: Math.max(0, (p.stock[`${colourId}:${size}`] ?? 0) + d) } }; };
+      if (item && piece) {
+        if (status === 'Replacement packed' && cur.exchangeTo) { bump(piece.colourId, piece.size, item.qty); bump(cur.exchangeTo.colourId, cur.exchangeTo.size, -item.qty); }
+        if (status === 'Completed' && cur.kind === 'return') {
+          bump(piece.colourId, piece.size, item.qty);
+          if ((cur.refundAmount ?? 0) > 0) refunds = [{ id: 'RF-' + (s.refunds.length + 1), orderId: cur.orderId, returnId: cur.id, source: 'return', amount: cur.refundAmount ?? 0, status: 'Pending', note: o?.payment === 'cod' ? 'Cash on delivery order: ask the customer for UPI or bank details' : 'Return completed', createdAt: Date.now() }, ...s.refunds];
+        }
       }
       return { ...s, edits, refunds, returns: s.returns.map((x) => (x.id === id ? upd.ret : x)) };
     });
@@ -636,7 +655,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     user: state.user, signIn, signOut, updateUser, addresses: state.addresses, saveAddress, removeAddress,
     coupons: adminData?.coupons ?? state.coupons, saveCoupon, saveProduct, createProduct, archiveProduct, restoreProduct,
     notifyMe, notified: state.notify, prefs: { whatsapp: state.whatsapp, newsletter: state.newsletter }, setPrefs, toast, say,
-    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, refreshAdmin, adminCancelOrder, adminCancelItem,
+    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, refreshAdmin, refreshAccount, adminCancelOrder, adminCancelItem,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
