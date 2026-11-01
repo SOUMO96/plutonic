@@ -36,5 +36,5 @@ insert into public.app_settings (key, value) values
   ('auto_approve_returns', 'on'),     -- approve and book pickups for requests that pass the rules
   ('auto_refund', 'on'),              -- pay return refunds through Cashfree when the item reaches the warehouse
   ('auto_approve_max_value', '5000'), -- items above this value (INR) wait for a person
-  ('auto_approve_max_requests', '3')  -- more than this many requests in 90 days wait for a person
+  ('auto_approve_max_requests', '10') -- more than this many requests in 90 days wait for a person
 on conflict (key) do nothing;

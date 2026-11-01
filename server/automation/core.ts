@@ -13,7 +13,7 @@ export async function log(db: SupabaseClient, subject: string, action: string, d
   await db.from('automation_log').insert({ subject, action, detail: detail ?? null, level });
 }
 
-export const DEFAULT_SETTINGS: Record<string, string> = { auto_courier: 'on', auto_approve_returns: 'on', auto_refund: 'on', auto_approve_max_value: '5000', auto_approve_max_requests: '3' };
+export const DEFAULT_SETTINGS: Record<string, string> = { auto_courier: 'on', auto_approve_returns: 'on', auto_refund: 'on', auto_approve_max_value: '5000', auto_approve_max_requests: '10' };
 export async function readSettings(db: SupabaseClient): Promise<Record<string, string>> {
   const { data } = await db.from('app_settings').select('key, value');
   const out = { ...DEFAULT_SETTINGS };
