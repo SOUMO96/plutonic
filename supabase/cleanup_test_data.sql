@@ -6,7 +6,8 @@ do $$
 declare o record;
 begin
   for o in select data from public.orders where (data->>'step')::int >= 0 loop perform public.restock_open_items(o.data->'items'); end loop;   -- skips items already cancelled (and restocked)
-  delete from public.orders;
+  delete from public.orders;            -- also removes their shipments and returns/refunds (cascade)
+  delete from public.automation_log;
   delete from public.reviews;
   delete from auth.users where email like '%@example.test';
   perform setval('public.order_seq', 10231);

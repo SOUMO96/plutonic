@@ -25,10 +25,19 @@ function rawEnv(mode: string): Record<string, string> {
 
 function devApi(mode: string): Plugin {
   const env = rawEnv(mode);
-  for (const k of ['ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'ADMIN_SESSION_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY', 'CASHFREE_APP_ID', 'CASHFREE_SECRET_KEY', 'CASHFREE_ENV', 'SITE_URL']) if (env[k] && !process.env[k]) process.env[k] = env[k];
+  for (const k of ['ADMIN_EMAIL', 'ADMIN_PASSWORD_HASH', 'ADMIN_SESSION_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY', 'CASHFREE_APP_ID', 'CASHFREE_SECRET_KEY', 'CASHFREE_ENV', 'SITE_URL', 'COURIER', 'SIM_STEP_SECONDS', 'AUTOMATION_SECRET']) if (env[k] && !process.env[k]) process.env[k] = env[k];
+  // Local development uses the courier simulator unless you choose another (COURIER=manual turns courier automation off).
+  process.env.COURIER ??= 'simulator';
   return {
     name: 'plutonic-dev-api',
     configureServer(server) {
+      // Local stand-in for a scheduler: run the fulfilment automation every few seconds (it is idempotent).
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.AUTOMATION_DEV !== 'off') {
+        const timer = setInterval(async () => {
+          try { await (await server.ssrLoadModule('/server/automation/engine.ts')).tick(); } catch { /* logged by the engine */ }
+        }, Number(process.env.AUTOMATION_DEV_INTERVAL_MS ?? 4000));
+        server.httpServer?.on('close', () => clearInterval(timer));
+      }
       server.middlewares.use(async (req, res, next) => {
         const m = /^\/api\/admin\/(login|session|logout|data|mutate)\/?(\?.*)?$/.exec(req.url ?? '');
         const v1 = (req.url ?? '').startsWith('/api/v1/');

@@ -58,3 +58,12 @@ export function verifyWebhookSignature(rawBody: string, timestamp: string | unde
   let given: Buffer; try { given = Buffer.from(signature, 'base64'); } catch { return false; }
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
+
+/** Ask Cashfree to refund part or all of a paid order. `refundId` must be unique per refund (makes retries safe). */
+export async function createRefund(orderId: string, amount: number, refundId: string, note: string): Promise<{ ok: true; reference: string } | { ok: false; message: string }> {
+  const r = await cf('/orders/' + encodeURIComponent(orderId) + '/refunds', { method: 'POST', body: { refund_amount: amount, refund_id: refundId, refund_note: note.slice(0, 100), refund_speed: 'STANDARD' } });
+  if (r.ok && r.data.cf_refund_id) return { ok: true, reference: String(r.data.cf_refund_id) };
+  // Same refund id already accepted earlier: treat as done (idempotent retry)
+  if (String(r.data.code ?? '').includes('refund_id_already_exists')) return { ok: true, reference: refundId };
+  return { ok: false, message: String(r.data.message ?? 'Cashfree refused the refund.') };
+}

@@ -2,8 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readJson, requireAdmin, sameOriginJson, send } from '../_lib/adminAuth';
 import { adminDb } from '../_lib/supabaseAdmin';
 import { cancelItem, cancelWhole } from '../../src/site/orderCancel';
-import { applyUpdate } from '../../src/site/returnRules';
-import type { ReturnReq } from '../../src/site/store';
+import { moveReturn } from '../../server/automation/core';
 
 /**
  * POST /api/admin/mutate  { op, ...payload } — every administrator write.
@@ -86,43 +85,18 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
     case 'return.update': {
       if (!str(b.id, 40) || !RETURN_STATUS.includes(b.status)) return fail('id/status');
-      const { data: row, error } = await db.from('returns').select('data, order_id, status').eq('id', b.id).maybeSingle();
-      if (error) return dbErr(); if (!row) return send(res, 404, { error: 'not_found' });
-      const r = row.data as ReturnReq;
-      const upd = applyUpdate({ ...r, status: row.status }, b.status, { pickupDate: b.pickupDate, pickupSlot: b.pickupSlot, note: typeof b.note === 'string' ? b.note : undefined });
-      if ('error' in upd) return send(res, 409, { error: 'invalid_transition', message: upd.error });
-      const { data: ord } = await db.from('orders').select('data').eq('id', row.order_id).maybeSingle();
-      const item = ord?.data?.items?.[r.itemIndex ?? -1];
-      const piece = r.piece ?? (item ? { colourId: item.colourId, size: item.size } : undefined);   // the size/colour the customer is sending back
-      const qty = r.qty ?? item?.qty ?? 1;
-      const stockOf = async (colourId: string, size: string) => { const { data: prod } = await db.from('products').select('data').eq('id', r.productId).maybeSingle(); return prod?.data?.stock?.[`${colourId}:${size}`] ?? 0; };
-      // An exchange can only move forward while the replacement size is in stock (checked early, and again when it is packed).
-      if ((b.status === 'Approved' || b.status === 'Replacement packed') && r.kind === 'exchange' && r.exchangeTo) {
-        if ((await stockOf(r.exchangeTo.colourId, r.exchangeTo.size)) < qty) return send(res, 409, { error: 'replacement_out_of_stock', message: `Size ${r.exchangeTo.size} is out of stock, so this exchange cannot go ahead.` });
-      }
-      // Move the status first (only if nobody changed it meanwhile), then apply side effects once.
-      const { data: moved, error: e2 } = await db.from('returns').update({ status: b.status, data: upd.ret }).eq('id', b.id).eq('status', row.status).select('id');
-      // A new status the database does not know yet means migration 007 has not been run.
-      if (e2 && (e2 as { code?: string }).code === '23514') return send(res, 409, { error: 'database_update_needed', message: 'The database does not know the replacement steps yet. Run supabase/migrations/007_exchange_once_replacement_tracking.sql in the Supabase SQL editor, then try again.' });
-      if (e2) return dbErr(); if (!moved?.length) return send(res, 409, { error: 'changed', message: 'This request was just updated. Refresh and try again.' });
-      if (item && piece) {
-        // Exchange: when the replacement is packed, the returned piece goes back on the shelf and the replacement leaves it.
-        if (b.status === 'Replacement packed' && r.exchangeTo) {
-          const { error: e3 } = await db.rpc('adjust_stock', { p_items: [{ productId: item.productId, colourId: piece.colourId, size: piece.size, delta: qty }, { productId: item.productId, colourId: r.exchangeTo.colourId, size: r.exchangeTo.size, delta: -qty }] });
-          if (e3) return dbErr();
-        }
-        // Return: when completed, the piece goes back on the shelf and the refund is recorded.
-        if (b.status === 'Completed' && r.kind === 'return') {
-          const { error: e3 } = await db.rpc('adjust_stock', { p_items: [{ productId: item.productId, colourId: piece.colourId, size: piece.size, delta: qty }] });
-          if (e3) return dbErr();
-          if ((r.refundAmount ?? 0) > 0) {
-            const cod = ord?.data?.payment === 'cod';
-            const { error: e4 } = await db.from('refunds').insert({ order_id: row.order_id, return_id: r.id, source: 'return', amount: r.refundAmount, note: cod ? 'Cash on delivery order: ask the customer for UPI or bank details' : 'Return completed' });
-            if (e4) return dbErr();
-          }
-        }
-      }
-      return send(res, 200, { ok: true, request: upd.ret });
+      const m = await moveReturn(db, b.id, b.status, { pickupDate: b.pickupDate, pickupSlot: b.pickupSlot, note: typeof b.note === 'string' ? b.note : undefined });
+      if ('http' in m) return send(res, m.http, { error: m.error, message: m.message });
+      return send(res, 200, { ok: true, request: m.ret });
+    }
+    case 'setting.set': {
+      const KEYS: Record<string, 'switch' | 'number'> = { auto_courier: 'switch', auto_approve_returns: 'switch', auto_refund: 'switch', auto_approve_max_value: 'number', auto_approve_max_requests: 'number' };
+      const kind = KEYS[b.key as string];
+      if (!kind) return fail('key');
+      const v = String(b.value);
+      if (kind === 'switch' ? !(v === 'on' || v === 'off') : !/^\d{1,7}$/.test(v)) return fail('value');
+      const { error } = await db.from('app_settings').upsert({ key: b.key, value: v });
+      return error ? dbErr() : send(res, 200, { ok: true });
     }
     case 'refund.markRefunded': {
       if (!int(b.id, 1, 2_000_000_000)) return fail('id');

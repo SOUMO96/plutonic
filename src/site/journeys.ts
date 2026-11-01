@@ -57,7 +57,7 @@ export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], 
     return { kind: 'delivery', id: '', title: 'Delivery', status: o.step === 4 ? 'Delivered' : o.step === 3 ? 'Out for delivery' : ORDER_STEPS[o.step], subtitle: `Order #${o.id}`,
       steps: ORDER_STEPS.map((s, i): JourneyStep => ({
         label: s, state: i <= o.step ? 'done' : 'todo', current: i === o.step && o.step < 4,
-        detail: i <= o.step ? `${when(o.history[i] ?? o.createdAt)}${i === 1 ? ' · Bengaluru warehouse' : ''}${i === 2 ? ' · Courier AWB ' + o.id.replace(/\D/g, '') + '01' : ''}` : 'Pending',
+        detail: i <= o.step ? `${when(o.history[i] ?? o.createdAt)}${i === 1 ? ' · Bengaluru warehouse' : ''}${i === 2 ? ' · Courier AWB ' + (o.awb ?? o.id.replace(/\D/g, '') + '01') : ''}` : 'Pending',
       })) };
   }
 
@@ -71,7 +71,7 @@ export function buildJourney(o: Order, returns: ReturnReq[], refunds: Refund[], 
   const detail = (s: ReturnReq['status']): string => {
     const t = at(s); const stamp = t ? when(t) : '';
     if (s === 'Pickup scheduled' && req.pickupDate) return `${stamp} · pickup ${longDay(req.pickupDate)}, ${req.pickupSlot ?? ''}`;
-    if (s === 'Replacement shipped') return `${stamp} · Courier AWB ${req.id.replace(/\D/g, '')}02`;
+    if (s === 'Replacement shipped') return `${stamp} · Courier AWB ${req.awb ?? req.id.replace(/\D/g, '') + '02'}`;
     if (s === 'Completed' && req.kind === 'return') return `${stamp}${refund ? ` · refund ${inr(refund.amount)} ${refund.status === 'Refunded' ? `sent${refund.reference ? ` (ref ${refund.reference})` : ''}` : 'being processed (5–7 working days)'}` : ''}`;
     return stamp;
   };

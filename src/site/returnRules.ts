@@ -140,7 +140,9 @@ export type Update = { pickupDate?: string; pickupSlot?: string; note?: string }
 /** Apply an admin status change. Returns the updated request, or an error message. */
 export function applyUpdate(r: ReturnReq, status: Status, u: Update, now = Date.now()): { ok: true; ret: ReturnReq } | { ok: false; error: string } {
   if (!nextStatuses(r).includes(status)) return { ok: false, error: `A request that is “${r.status}” cannot move to “${status}”.` };
-  let next: ReturnReq = { ...r, status, history: [...(r.history ?? [{ status: 'Requested' as Status, at: r.createdAt }]), { status, at: now }] };
+  const prior = r.history ?? [{ status: 'Requested' as Status, at: r.createdAt }];
+  now = Math.max(now, prior[prior.length - 1]?.at ?? 0);   // timestamps never run backwards (clock differences)
+  let next: ReturnReq = { ...r, status, history: [...prior, { status, at: now }] };
   if (u.note?.trim()) next = { ...next, adminNote: u.note.trim().slice(0, 300) };
   if (status === 'Pickup scheduled') {
     const bad = pickupDateError(u.pickupDate, now); if (bad) return { ok: false, error: bad };

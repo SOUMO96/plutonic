@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ApiError, bearer, clientFor, clientIp, dbFail, limit, readRaw, serviceClient, str, type Ctx } from './lib';
 import { cashfreeConfigured, cashfreeMode, createSession, fetchSettlement, verifyWebhookSignature } from './cashfree';
+import { applyCourierEvent, tick } from '../automation/engine';
+import { courierByName, type ShipmentRow } from '../courier';
 
 type Result = unknown | { __status: number; body: unknown };
 type Handler = (c: Ctx) => Promise<Result>;
@@ -178,6 +180,28 @@ add('POST', '/payments/cashfree/webhook', 'none', async (c) => {
   if (/^PL-\d{4,9}$/.test(orderId) && String(evt?.type ?? '').startsWith('PAYMENT_')) await settle(orderId);   // re-check with the gateway rather than trusting the payload
   return { received: true };
 }, { bucket: 'webhook', max: 300, raw: true });
+
+// ------------------------------------------------------------------ fulfilment automation
+// "Run whatever is due". Idempotent, takes no input, so it is safe to call from the browser right after an order or
+// a return request (so things start at once) and from a scheduler every minute (so they keep moving).
+add('POST', '/automation/kick', 'none', async () => ({ ok: true, ...(await tick()) }), { bucket: 'kick', max: 40, raw: true });
+add('POST', '/automation/tick', 'none', async (c) => {
+  const secret = process.env.AUTOMATION_SECRET;
+  if (secret && c.req.headers['x-automation-secret'] !== secret) throw new ApiError(401, 'unauthorized', 'Bad scheduler secret.');
+  return { ok: true, ...(await tick()) };
+}, { bucket: 'tick', max: 60, raw: true });
+// Couriers that PUSH tracking updates post here. The adapter verifies the signature and translates the payload.
+add('POST', '/couriers/:name/webhook', 'none', async (c) => {
+  const adapter = courierByName(c.params.name);
+  if (!adapter?.parseWebhook) throw new ApiError(501, 'not_implemented', 'No webhook adapter for this courier yet.');
+  const raw = await readRaw(c.req);
+  const evt = adapter.parseWebhook(c.req.headers, raw);
+  if (!evt) throw new ApiError(401, 'bad_signature', 'Invalid courier update.');
+  const db = serviceClient();
+  const { data } = await db.from('shipments').select('*').eq('awb', evt.awb).maybeSingle();
+  if (data) await applyCourierEvent(db, data as ShipmentRow, evt.status, evt.at);
+  return { received: true };
+}, { bucket: 'courier', max: 600, raw: true });
 
 // ------------------------------------------------------------------ dispatcher
 function match(method: string, parts: string[]): { route: Route; params: Record<string, string> } | 'method' | null {

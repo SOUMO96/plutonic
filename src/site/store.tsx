@@ -33,6 +33,8 @@ export type Order = {
   paymentStatus?: 'simulated' | 'cod' | 'pending' | 'paid' | 'failed';
   /** Set when an order or item is cancelled by an administrator. `refundDue` is the amount owed back (online orders only). */
   cancelReason?: string; cancelledBy?: 'admin' | 'customer'; refundDue?: number;
+  /** Set by the courier automation: real tracking number, and an alert if the courier reports a problem. */
+  awb?: string; courier?: string; alert?: string;
 };
 export type ReturnReq = {
   id: string; orderId: string; productName: string; variant: string; kind: 'exchange' | 'return'; reason: string; note: string;
@@ -47,6 +49,10 @@ export type ReturnReq = {
   refundAmount?: number;
   pickupDate?: string; pickupSlot?: string; adminNote?: string;
   history?: { status: ReturnReq['status']; at: number }[];
+  /** Set by the automation when a request needs a person (it was not auto-approved). */
+  needsReview?: boolean; reviewReason?: string;
+  /** Courier tracking numbers: for the pickup, and for the replacement parcel of an exchange. */
+  pickupAwb?: string; awb?: string;
 };
 export type Refund = { id: number | string; orderId: string; returnId?: string; source: 'cancellation' | 'return'; amount: number; status: 'Pending' | 'Refunded'; note?: string; reference?: string; createdAt: number; processedAt?: number };
 export type Review = { id: string; productId: string; name: string; rating: number; text: string; size: string; fit: string; status: 'Published' | 'Pending' | 'Hidden'; createdAt: number };
@@ -100,6 +106,8 @@ const rowToReview = (r: ReviewRow): Review =>
 const run = (q: PromiseLike<unknown>) => { void Promise.resolve(q).catch(() => undefined); };
 type RefundRow = { id: number; order_id: string; return_id: string | null; source: Refund['source']; amount: number; status: Refund['status']; note: string | null; reference: string | null; created_at: string; processed_at: string | null };
 const rowToRefund = (x: RefundRow): Refund => ({ id: x.id, orderId: x.order_id, returnId: x.return_id ?? undefined, source: x.source, amount: x.amount, status: x.status, note: x.note ?? undefined, reference: x.reference ?? undefined, createdAt: Date.parse(x.created_at), processedAt: x.processed_at ? Date.parse(x.processed_at) : undefined });
+/** Ask the server to run whatever automation is due (courier booking, auto-approval). Best effort; a scheduler also runs it. */
+const kickAutomation = () => { try { void fetch('/api/v1/automation/kick', { method: 'POST' }).catch(() => undefined); } catch { /* ignore */ } };
 const REVIEW_COLS = 'id, product_id, name, rating, body, size, fit, status, created_at';
 
 function initial(): Persisted {
@@ -119,7 +127,9 @@ function initial(): Persisted {
 
 type Result = { ok: boolean; message: string };
 export type AdminStatus = 'idle' | 'loading' | 'ready' | 'error';
-type AdminData = { products: Product[]; orders: Order[]; returns: ReturnReq[]; refunds: Refund[]; reviews: Review[]; coupons: Coupon[] };
+export type AutomationLog = { id: number; at: number; subject: string; action: string; detail?: string; level: 'info' | 'review' | 'error' };
+export type Automation = { mode: string; settings: Record<string, string>; log: AutomationLog[] };
+type AdminData = { products: Product[]; orders: Order[]; returns: ReturnReq[]; refunds: Refund[]; reviews: Review[]; coupons: Coupon[]; automation?: Automation };
 export type NewReturn = { orderId: string; itemIndex: number; kind: 'exchange' | 'return'; reason: string; note: string; exchangeSize?: string };
 export type Auth = {
   signUp: (p: { email: string; password: string; firstName: string; lastName: string; mobile: string; fit?: string }) => Promise<Result & { needsConfirm?: boolean }>;
@@ -161,6 +171,8 @@ export type Store = {
   /** Administrator: move a request along (approve, schedule pickup, picked up, complete, reject). */
   updateReturn: (id: string, status: ReturnReq['status'], u?: Update) => Promise<{ ok: boolean; message: string }>;
   markRefunded: (id: number | string, reference: string) => Promise<boolean>;
+  /** Administrator: the fulfilment automation (courier, switches, what it did). */
+  automation: Automation | null; setAutomation: (key: string, value: string) => Promise<boolean>;
   /** Customer: fetch the latest order / return / refund status from the server. */
   refreshAccount: () => Promise<void>;
   reviews: Review[]; addReview: (r: Omit<Review, 'id' | 'createdAt' | 'status'>) => void; setReviewStatus: (id: string, s: Review['status']) => void;
@@ -392,6 +404,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setState((s) => ({ ...s, orders: [order, ...s.orders], cart: [], couponCode: '' }));
       if (uid.current && !state.addresses.some((a) => a.pin === d.address.pin && a.line1 === d.address.line1)) saveAddress({ ...d.address, id: undefined, label: d.address.label || 'Home' });
       void loadCatalog();
+      kickAutomation();
       return order;
     }
     for (const l of state.cart) {
@@ -490,6 +503,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.rpc('create_return', { p: r });
       if (error) return { ok: false, message: error.message };
       setState((s) => ({ ...s, returns: [data as ReturnReq, ...s.returns] }));
+      kickAutomation();
       return { ok: true, message: 'Request sent', request: data as ReturnReq };
     }
     // Browser demo: same rules as the database function
@@ -548,6 +562,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
     return { ok: true, message: 'Updated' };
   };
+  const setAutomation = async (key: string, value: string) => { const ok = await adminCall('setting.set', { key, value }); if (ok) await refreshAdmin(); return ok; };
   const markRefunded: Store['markRefunded'] = async (id, reference) => {
     if (adminData) { const ok = await adminCall('refund.markRefunded', { id, reference }); if (ok) { await refreshAdmin(); say('Marked as refunded'); } return ok; }
     setState((s) => ({ ...s, refunds: s.refunds.map((x) => (x.id === id ? { ...x, status: 'Refunded', reference: reference || undefined, processedAt: Date.now() } : x)) }));
@@ -683,7 +698,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     user: state.user, signIn, signOut, updateUser, addresses: state.addresses, saveAddress, removeAddress,
     coupons: adminData?.coupons ?? state.coupons, saveCoupon, saveProduct, createProduct, archiveProduct, restoreProduct,
     notifyMe, notified: state.notify, prefs: { whatsapp: state.whatsapp, newsletter: state.newsletter }, setPrefs, toast, say,
-    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, refreshAdmin, refreshAccount, adminCancelOrder, adminCancelItem,
+    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, refreshAdmin, refreshAccount, automation: adminData?.automation ?? null, setAutomation, adminCancelOrder, adminCancelItem,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

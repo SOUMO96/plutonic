@@ -42,6 +42,8 @@ Flutter: `supabase_flutter` → `Supabase.instance.client.auth.signInWithPasswor
 | `POST /payments/cashfree/session` | optional | Start payment for a pending order: `{orderId, email}` → `{paymentSessionId, mode}` |
 | `GET /payments/cashfree/verify?orderId=` | – | Settle with Cashfree and return `paid` / `pending` / `closed` |
 | `POST /payments/cashfree/webhook` | signature | Cashfree notifications (HMAC-verified; the order is re-checked with Cashfree before being marked paid) |
+| `POST /automation/kick`, `POST /automation/tick` | – / secret | Run whatever fulfilment automation is due (idempotent). `tick` is for a scheduler and checks `x-automation-secret` when `AUTOMATION_SECRET` is set |
+| `POST /couriers/:name/webhook` | courier signature | Courier tracking updates (501 until an adapter for that courier exists) |
 
 Admin operations are **not** part of this public API. They use `/api/admin/*`, which requires the separate administrator session (see README).
 

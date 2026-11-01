@@ -7,7 +7,7 @@ import { isOnline, itemRefund } from '../orderCancel';
 import { LOGO, Photo } from '../ui';
 import { adminSignOut } from './AdminAccess';
 
-const SECTIONS = ['Overview', 'Orders', 'Products', 'Inventory', 'Categories', 'Customers', 'Coupons', 'Banners', 'Returns', 'Refunds', 'Reviews', 'Analytics'] as const;
+const SECTIONS = ['Overview', 'Orders', 'Products', 'Inventory', 'Categories', 'Customers', 'Coupons', 'Banners', 'Returns', 'Refunds', 'Automation', 'Reviews', 'Analytics'] as const;
 type Section = (typeof SECTIONS)[number];
 const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
@@ -125,6 +125,7 @@ function ReturnCard({ r }: { r: ReturnReq }) {
         <div><b>Order #{r.orderId} · {r.kind === 'exchange' ? 'Exchange' : 'Return'} {r.id}</b><span className="muted small">{r.productName} · {r.variant}{r.qty ? ` · Qty ${r.qty}` : ''}{o ? ` · ${o.address.name}, ${o.address.city}` : ''}</span></div>
         <span className={'status' + (r.status === 'Rejected' ? ' status--bad' : r.status === 'Requested' ? ' status--info' : '')}>{r.status}</span>
       </div>
+      {r.needsReview && r.status === 'Requested' && <p className="note" role="note"><b>Not auto-approved.</b> {r.reviewReason}</p>}
       <p className="small">Reason: <b>{r.reason}</b>{r.note ? ` · “${r.note}”` : ''}</p>
       {r.kind === 'exchange' && r.exchangeTo && <p className="small">Customer wants size <b>{r.exchangeTo.size}</b> instead of <b>{r.piece?.size ?? r.variant}</b> (same colour: {r.exchangeTo.colourName}). One exchange per item.</p>}
       {r.kind === 'return' && <p className="small">Refund when completed: <b>{inr(r.refundAmount ?? 0)}</b>{o?.payment === 'cod' ? ' · cash on delivery: ask for UPI/bank details' : ''}</p>}
@@ -196,6 +197,55 @@ function RefundsPanel() {
   );
 }
 
+
+/** What the robot is allowed to do, what it needs from you, and a record of what it did. */
+function AutomationPanel() {
+  const s = useStore();
+  const a = s.automation;
+  const [maxValue, setMaxValue] = useState('');
+  const [maxReq, setMaxReq] = useState('');
+  useEffect(() => { if (a) { setMaxValue(a.settings.auto_approve_max_value); setMaxReq(a.settings.auto_approve_max_requests); } }, [a?.settings.auto_approve_max_value, a?.settings.auto_approve_max_requests]);
+  if (!a) return <section className="panel"><p className="muted">Automation runs against the live database. It is not available in the browser-only demo.</p></section>;
+  const on = (k: string) => a.settings[k] === 'on';
+  const toggle = (k: string) => { void s.setAutomation(k, on(k) ? 'off' : 'on'); };
+  const waiting = s.returns.filter((r) => r.status === 'Requested' && r.needsReview);
+  const SWITCHES: [string, string, string][] = [
+    ['auto_courier', 'Courier and tracking', 'Book the courier when an order is paid, then move the order (Packed, Shipped, Out for delivery, Delivered) from the courier’s updates. Also books pickups and replacement parcels.'],
+    ['auto_approve_returns', 'Approve returns and exchanges', 'Approve requests that pass the rules below and book the pickup for tomorrow, 9 am – 1 pm. Anything else waits for you.'],
+    ['auto_refund', 'Pay return refunds', 'When a returned item reaches the warehouse, refund it through Cashfree. Cash-on-delivery refunds always wait for you (UPI or bank details are needed).'],
+  ];
+  return (
+    <section className="panel auto">
+      <div className={'note' + (a.mode === 'manual' ? '' : ' ok')} role="status">
+        {a.mode === 'manual'
+          ? <><b>Courier: not connected.</b> Delivery steps are updated by hand (Orders page). Returns can still be approved and refunded automatically.</>
+          : a.mode === 'simulator'
+            ? <><b>Courier: simulator (test mode).</b> A pretend courier collects and delivers parcels within a few minutes so you can watch the whole flow. Nothing real is shipped.</>
+            : <><b>Courier: {a.mode}.</b> Tracking updates come from the courier.</>}
+      </div>
+      <div className="auto-sw">{SWITCHES.map(([k, t, d]) => (
+        <label key={k} className="toggle auto-row"><span><b>{t}</b><small className="muted">{d}</small></span><input type="checkbox" role="switch" checked={on(k)} onChange={() => toggle(k)} /></label>
+      ))}</div>
+      <h3 className="h3">Auto-approval rules</h3>
+      <p className="muted small">A request is approved automatically only if the order is delivered, it is inside the 14 days, and: the reason is not “Faulty or damaged”, the item costs no more than the limit, and the customer has not made more than the allowed number of requests in 90 days.</p>
+      <div className="row-gap">
+        <label className="small">Item value limit (₹)<input inputMode="numeric" value={maxValue} onChange={(e) => setMaxValue(e.target.value.replace(/\D/g, ''))} /></label>
+        <label className="small">Max requests in 90 days<input inputMode="numeric" value={maxReq} onChange={(e) => setMaxReq(e.target.value.replace(/\D/g, ''))} /></label>
+        <button type="button" className="btn btn--dark btn--sm" onClick={async () => { const ok1 = await s.setAutomation('auto_approve_max_value', maxValue || '0'); const ok2 = await s.setAutomation('auto_approve_max_requests', maxReq || '0'); if (ok1 && ok2) s.say('Rules saved'); }}>Save rules</button>
+      </div>
+      <h3 className="h3">Needs your review {waiting.length > 0 && <span className="status status--info">{waiting.length}</span>}</h3>
+      {waiting.length === 0 ? <p className="muted small">Nothing is waiting. Every request so far was handled automatically.</p>
+        : waiting.map((r) => <div key={r.id} className="order-row"><div><b>Order #{r.orderId} · {r.kind === 'exchange' ? 'Exchange' : 'Return'} {r.id}</b><span className="muted small">{r.productName} · {r.reviewReason}</span></div><span className="muted small">Open it under Returns</span></div>)}
+      <h3 className="h3">What the automation did</h3>
+      {a.log.length === 0 ? <p className="muted small">Nothing yet.</p> : (
+        <div className="table-wrap"><table className="tbl tbl--rows"><thead><tr><th>When</th><th>Item</th><th>Action</th><th>Detail</th></tr></thead><tbody>
+          {a.log.map((l) => <tr key={l.id} className={l.level === 'error' ? 'row-bad' : l.level === 'review' ? 'row-warn' : undefined}><td>{fmt(l.at)}</td><td><b>{l.subject}</b></td><td>{l.action}</td><td className="muted small">{l.detail ?? ''}</td></tr>)}
+        </tbody></table></div>
+      )}
+    </section>
+  );
+}
+
 const CANCEL_REASONS = ['Item out of stock or damaged', 'Customer asked to cancel', 'Payment problem', 'Address or delivery problem', 'Other'];
 
 /** Cancel a whole order, or one item of it. Stock goes back on the shelf; refunds due are recorded on the order. */
@@ -263,14 +313,14 @@ export default function Admin() {
     <div className="admin">
       <aside className="admin-side" aria-label="Admin">
         <Link to="/" className="admin-brand"><img src={LOGO} alt="PLUTONIC" height={40} /><span className="lbl">Admin</span></Link>
-        <nav>{SECTIONS.map((x) => <button key={x} type="button" aria-current={sec === x ? 'page' : undefined} onClick={() => setSec(x)}>{x}{x === 'Returns' && pendingReturns > 0 && <i>{pendingReturns}</i>}{x === 'Refunds' && s.refunds.filter((y) => y.status === 'Pending').length > 0 && <i>{s.refunds.filter((y) => y.status === 'Pending').length}</i>}{x === 'Reviews' && pendingReviews > 0 && <i>{pendingReviews}</i>}</button>)}</nav>
+        <nav>{SECTIONS.map((x) => <button key={x} type="button" aria-current={sec === x ? 'page' : undefined} onClick={() => setSec(x)}>{x}{x === 'Returns' && pendingReturns > 0 && <i>{pendingReturns}</i>}{x === 'Automation' && s.returns.filter((y) => y.status === 'Requested' && y.needsReview).length > 0 && <i>{s.returns.filter((y) => y.status === 'Requested' && y.needsReview).length}</i>}{x === 'Refunds' && s.refunds.filter((y) => y.status === 'Pending').length > 0 && <i>{s.refunds.filter((y) => y.status === 'Pending').length}</i>}{x === 'Reviews' && pendingReviews > 0 && <i>{pendingReviews}</i>}</button>)}</nav>
         <Link to="/" className="lbl ulink small">← Back to store</Link>
         <button type="button" className="lbl ulink small admin-signout" onClick={() => { void adminSignOut(); }}>Sign out</button>
       </aside>
       <main className="admin-main">
         {s.adminStatus === 'loading' && <p className="note" role="status">Loading data from the database…</p>}
         {s.adminStatus === 'error' && <p className="note err" role="alert">The database could not be reached or is not configured on the server (SUPABASE_SERVICE_ROLE_KEY). Nothing here can be saved until that is fixed.</p>}
-        <div className="admin-top"><div><h1 className="h2">{sec}</h1><span className="muted small">Access is verified by the server. Catalogue, orders and edits are demonstration data stored in this browser only.</span></div><button className="linkbtn" type="button" onClick={() => { void refreshAdmin(); s.say('Refreshed'); }}>Refresh</button>{sec === 'Products' && <button className="btn btn--dark" type="button" onClick={() => setEdit(blank('men'))}>Add product</button>}</div>
+        <div className="admin-top"><div><h1 className="h2">{sec}</h1><span className="muted small">{s.live ? 'Live data from your database. Access is verified by the server.' : 'Access is verified by the server. Catalogue, orders and edits are demonstration data stored in this browser only.'}</span></div><button className="linkbtn" type="button" onClick={() => { void refreshAdmin(); s.say('Refreshed'); }}>Refresh</button>{sec === 'Products' && <button className="btn btn--dark" type="button" onClick={() => setEdit(blank('men'))}>Add product</button>}</div>
 
         {sec === 'Overview' && <>
           <details className="panel guide" open>
@@ -320,6 +370,7 @@ export default function Admin() {
 
         {sec === 'Returns' && <ReturnsPanel />}
         {sec === 'Refunds' && <RefundsPanel />}
+        {sec === 'Automation' && <AutomationPanel />}
 
         {sec === 'Reviews' && <section className="panel">{s.reviews.length === 0 && <p className="muted">No customer reviews to moderate yet.</p>}{s.reviews.map((r) => <div key={r.id} className="order-row"><div><b>{s.product(r.productId)?.name} · {'★'.repeat(r.rating)}</b><span className="muted small">{r.name} · {r.status} — {r.text}</span></div><div className="row-gap"><button className="btn btn--dark btn--sm" type="button" onClick={() => s.setReviewStatus(r.id, 'Published')}>Publish</button><button className="btn btn--ghost btn--sm" type="button" onClick={() => s.setReviewStatus(r.id, 'Hidden')}>Hide</button></div></div>)}</section>}
 

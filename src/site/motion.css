@@ -218,3 +218,9 @@
 .tracker .timeline li { opacity: .7; filter: none; transform: none; }
 .tracker .timeline li.done { opacity: 1; }
 .tracker .timeline li:not(.done) .dotc { background: #E9E6DF; }
+
+/* Admin Automation page */
+.auto { display: flex; flex-direction: column; gap: 14px; }
+.auto-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid rgba(9,9,9,.12); } .auto-row span { display: flex; flex-direction: column; gap: 3px; max-width: 70ch; }
+.auto label.small { display: flex; flex-direction: column; gap: 4px; } .auto label.small input { height: 40px; border: 1px solid rgba(9,9,9,.3); padding: 0 10px; background: #fff; width: 160px; font: 400 14px Inter, sans-serif; }
+.row-warn td { background: rgba(200,150,40,.12); } .row-bad td { background: rgba(155,44,31,.12); }
