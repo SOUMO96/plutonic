@@ -3,6 +3,7 @@ import { Check } from 'lucide-react';
 import { inr, sizeStock } from '../catalog';
 import { go, Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Order } from '../store';
+import { CUSTOMER_CANCEL_BEFORE } from '../orderCancel';
 import { Photo, ProductCard } from '../ui';
 import { buildJourney } from '../journeys';
 import { OrderSummary, orderLine } from './MyOrders';
@@ -22,7 +23,7 @@ export function Tracking({ route }: { route: Route }) {
   const ref = (v: string) => v.trim().replace(/^#/, '').toUpperCase();
   return (
     <div className="pl-wrap track">
-      <div className="page-head"><span className="lbl muted">Order tracking</span></div>
+      <div className="page-head"><h1 className="lbl muted">Order tracking</h1></div>
       <form className="field-row track-form" onSubmit={(e) => { e.preventDefault(); if (ref(q)) go('/tracking/' + ref(q)); }}>
         <label className="sr" htmlFor="ord">Order number</label><input id="ord" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order number, e.g. PL-10231" /><button className="btn btn--dark" type="submit">Track</button>
       </form>
@@ -46,7 +47,7 @@ export function Tracking({ route }: { route: Route }) {
           </section>
           <OrderSummary o={o} />
           <footer className="opage-foot"><p className="muted small">Delivering to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}</p>
-            <div className="opage-links"><Link to="/support" className="ulink small">Need help with this order?</Link>{o.step >= 0 && o.step < 3 && <button type="button" className="linkbtn small" onClick={() => { cancelOrder(o.id); say('Order cancelled'); }}>Cancel order</button>}</div></footer>
+            <div className="opage-links"><Link to="/support" className="ulink small">Need help with this order?</Link>{o.step >= 0 && o.step < CUSTOMER_CANCEL_BEFORE && <button type="button" className="linkbtn small" onClick={() => { cancelOrder(o.id); say('Order cancelled'); }}>Cancel order</button>}</div></footer>
           </section>
           </div>
         </div>

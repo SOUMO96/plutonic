@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { activeCourier, type Courier, type CourierStatus, type ShipmentKind, type ShipmentRow } from '../courier';
 import { cashfreeConfigured, createRefund } from '../v1/cashfree';
 import { serviceClient } from '../v1/lib';
-import { log, moveReturn, readSettings, setOrderStep } from './core';
+import { exchangeToRefund, log, logOnce, moveReturn, readSettings, setOrderStep } from './core';
 import type { Order, ReturnReq } from '../../src/site/store';
 
 let running = false;
@@ -85,7 +85,7 @@ async function bookShipment(db: SupabaseClient, courier: Courier, kind: Shipment
 async function couriers(db: SupabaseClient, courier: Courier): Promise<number> {
   let n = 0;
   // 2. forward deliveries for paid / cash-on-delivery orders
-  const { data: fresh } = await db.from('orders').select('id, data').eq('data->>step', '0').in('payment_status', ['simulated', 'cod', 'paid']).limit(25);
+  const { data: fresh } = await db.from('orders').select('id, data').eq('data->>step', '0').in('payment_status', ['simulated', 'cod', 'paid']).limit(100);
   if (fresh?.length) {
     const { data: have } = await db.from('shipments').select('order_id').eq('kind', 'delivery').in('order_id', fresh.map((o) => o.id));
     const done = new Set((have ?? []).map((h) => h.order_id));
@@ -93,13 +93,12 @@ async function couriers(db: SupabaseClient, courier: Courier): Promise<number> {
       if (done.has(row.id)) continue;
       const b = await bookShipment(db, courier, 'delivery', row.data as Order, row.id, null);
       if (!b) continue;
-      await setOrderStep(db, row.id, 1);
-      await patchOrder(db, row.id, { awb: b.awb, courier: b.courier });
+      await setOrderStep(db, row.id, 1, { awb: b.awb, courier: b.courier });   // packed and its tracking number, in one write
       await log(db, row.id, 'Order packed, courier booked', `AWB ${b.awb} (${b.courier})`); n++;
     }
   }
   // 3a. pickups for returns/exchanges whose pickup is scheduled (by the automation or by a person)
-  const { data: sched } = await db.from('returns').select('id, order_id, data').eq('status', 'Pickup scheduled').limit(25);
+  const { data: sched } = await db.from('returns').select('id, order_id, data').eq('status', 'Pickup scheduled').limit(100);
   if (sched?.length) {
     const { data: have } = await db.from('shipments').select('return_id').eq('kind', 'pickup').in('return_id', sched.map((r) => r.id));
     const done = new Set((have ?? []).map((h) => h.return_id));
@@ -114,7 +113,7 @@ async function couriers(db: SupabaseClient, courier: Courier): Promise<number> {
     }
   }
   // 3b. replacement parcels for exchanges that were packed
-  const { data: packed } = await db.from('returns').select('id, order_id, data').eq('status', 'Replacement packed').limit(25);
+  const { data: packed } = await db.from('returns').select('id, order_id, data').eq('status', 'Replacement packed').limit(100);
   if (packed?.length) {
     const { data: have } = await db.from('shipments').select('return_id').eq('kind', 'replacement').in('return_id', packed.map((r) => r.id));
     const done = new Set((have ?? []).map((h) => h.return_id));
@@ -129,7 +128,7 @@ async function couriers(db: SupabaseClient, courier: Courier): Promise<number> {
   }
   // 4. progress: ask the courier about every parcel that is still moving
   if (courier.poll) {
-    const { data: active } = await db.from('shipments').select('*').not('status', 'in', '(delivered,rto,failed)').order('id').limit(100);
+    const { data: active } = await db.from('shipments').select('*').not('status', 'in', '(delivered,rto,failed)').order('id').limit(300);
     for (const s of (active ?? []) as ShipmentRow[]) {
       if (s.courier !== courier.name) continue;
       const next = await courier.poll(s);
@@ -162,7 +161,14 @@ export async function applyCourierEvent(db: SupabaseClient, s: ShipmentRow, stat
         await log(db, rid, 'Item picked up', `AWB ${s.awb}`);
         if (m.ret.kind === 'exchange') {
           const p = await moveReturn(db, rid, 'Replacement packed');
-          await log(db, rid, 'http' in p ? 'Could not pack replacement' : 'Replacement packed, stock swapped', 'http' in p ? p.message : undefined, 'http' in p ? 'review' : 'info');
+          if (!('http' in p)) await log(db, rid, 'Replacement packed, stock swapped');
+          else if (p.error === 'replacement_out_of_stock') {
+            // the new size sold out after the courier collected the item: refund instead of leaving the customer waiting
+            const why = `Your size ${m.ret.exchangeTo?.size ?? ''} ran out of stock, so we are refunding this item instead.`;
+            const c = await exchangeToRefund(db, rid, why);
+            if ('http' in c) await log(db, rid, 'Could not pack replacement', c.message, 'review');
+            else { await log(db, rid, 'Exchange changed to a refund', 'Replacement size out of stock after pickup'); await autoRefund(db, cfg, rid); }
+          } else await log(db, rid, 'Could not pack replacement', p.message, 'review');
         }
       }
     }
@@ -182,22 +188,76 @@ export async function applyCourierEvent(db: SupabaseClient, s: ShipmentRow, stat
   if (to) { const m = await moveReturn(db, rid, to); if (!('http' in m)) await log(db, rid, to === 'Completed' ? 'Replacement delivered' : to, `AWB ${s.awb}`); }
 }
 
-/** Pay the refund for a completed return, when the settings and the payment method allow it. */
-async function autoRefund(db: SupabaseClient, cfg: Record<string, string>, returnId: string) {
-  if (cfg.auto_refund !== 'on') { await log(db, returnId, 'Refund waiting', 'Automatic refunds are switched off', 'review'); return; }
-  const { data: rf } = await db.from('refunds').select('*').eq('return_id', returnId).eq('status', 'Pending').maybeSingle();
-  if (!rf) return;
+/**
+ * Pay one refund (return or cancellation) when the settings and the payment method allow it.
+ * The refund is claimed first, so two servers can never pay it twice, and the gateway call uses a fixed refund id (RF<id>)
+ * so even a repeat after a crash is the same refund at Cashfree. A failed attempt releases the claim and is retried by the sweep.
+ */
+async function payRefund(db: SupabaseClient, rf: { id: number; order_id: string; amount: number; return_id: string | null }, quiet = false): Promise<boolean> {
+  const subject = rf.return_id ?? rf.order_id;
   const { data: ord } = await db.from('orders').select('data, payment_status').eq('id', rf.order_id).maybeSingle();
-  const paid = async (reference: string, note: string) => {
-    const { data: done } = await db.from('refunds').update({ status: 'Refunded', reference, processed_at: new Date().toISOString() }).eq('id', rf.id).eq('status', 'Pending').select('id');
-    if (done?.length) await log(db, returnId, 'Refund paid', `₹${rf.amount} (${note})`);
-  };
-  if (ord?.data?.payment === 'cod') { await log(db, returnId, 'Refund needs a person', `₹${rf.amount}: cash-on-delivery order, ask the customer for UPI or bank details`, 'review'); return; }
-  if (ord?.payment_status === 'simulated') { await paid('SIMULATED', 'payments are simulated, no real money moved'); return; }
-  if (!cashfreeConfigured()) { await log(db, returnId, 'Refund needs a person', `₹${rf.amount}: Cashfree is not configured`, 'review'); return; }
-  const res = await createRefund(rf.order_id, rf.amount, `RF${rf.id}`, `Return ${returnId}`);
-  if ('reference' in res) await paid(res.reference, 'through Cashfree');
-  else await log(db, returnId, 'Refund failed', `₹${rf.amount}: ${res.message}`, 'error');
+  if (!ord) return false;
+  if (ord.data?.payment === 'cod') { if (!quiet) await logOnce(db, subject, 'Refund needs a person', `₹${rf.amount}: cash-on-delivery order, ask the customer for UPI or bank details`, 'review'); return false; }
+  const simulated = ord.payment_status === 'simulated';
+  if (!simulated && !cashfreeConfigured()) { if (!quiet) await logOnce(db, subject, 'Refund needs a person', `₹${rf.amount}: Cashfree is not configured`, 'review'); return false; }
+  const stale = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data: claimed } = await db.from('refunds').update({ processed_at: new Date().toISOString() }).eq('id', rf.id).eq('status', 'Pending').or(`processed_at.is.null,processed_at.lt.${stale}`).select('id');
+  if (!claimed?.length) return false;   // someone else is paying it, or it is already paid
+  const release = () => db.from('refunds').update({ processed_at: null }).eq('id', rf.id).eq('status', 'Pending');
+  // never refund more than was paid for the order
+  const { data: paidBack } = await db.from('refunds').select('amount').eq('order_id', rf.order_id).eq('status', 'Refunded');
+  const already = (paidBack ?? []).reduce((n, x) => n + x.amount, 0);
+  if (already + rf.amount > (ord.data?.total ?? 0)) { await release(); await logOnce(db, subject, 'Refund needs a person', `₹${rf.amount} would take refunds above what the customer paid (₹${ord.data?.total})`, 'review'); return false; }
+  let reference = 'SIMULATED', note = 'payments are simulated, no real money moved';
+  if (!simulated) {
+    const res = await createRefund(rf.order_id, rf.amount, `RF${rf.id}`, rf.return_id ? `Return ${rf.return_id}` : 'Order cancelled');
+    if (!('reference' in res)) { await release(); await log(db, subject, 'Refund failed', `₹${rf.amount}: ${res.message}. It will be retried.`, 'error'); return false; }
+    reference = res.reference; note = 'through Cashfree';
+  }
+  const { data: done } = await db.from('refunds').update({ status: 'Refunded', reference, processed_at: new Date().toISOString() }).eq('id', rf.id).eq('status', 'Pending').select('id');
+  if (done?.length) await log(db, subject, 'Refund paid', `₹${rf.amount} (${note})`);
+  return !!done?.length;
+}
+
+/** Pay the refund for a completed return straight away. */
+async function autoRefund(db: SupabaseClient, cfg: Record<string, string>, returnId: string) {
+  if (cfg.auto_refund !== 'on') { await logOnce(db, returnId, 'Refund waiting', 'Automatic refunds are switched off', 'review'); return; }
+  const { data: rf } = await db.from('refunds').select('id, order_id, amount, return_id').eq('return_id', returnId).eq('status', 'Pending').maybeSingle();
+  if (rf) await payRefund(db, rf);
+}
+
+/** Retry every refund that is still waiting (cancelled orders, failed gateway calls, refunds from before auto-refund was on). */
+async function refundSweep(db: SupabaseClient, cfg: Record<string, string>): Promise<number> {
+  if (cfg.auto_refund !== 'on') return 0;
+  const { data: rows } = await db.from('refunds').select('id, order_id, amount, return_id').eq('status', 'Pending').order('id').limit(50);
+  let n = 0;
+  for (const rf of rows ?? []) if (await payRefund(db, rf, true)) n++;
+  return n;
+}
+
+const lastActivity = (r: ReturnReq) => Math.max(r.createdAt ?? 0, ...(r.history ?? []).map((h) => h.at));
+
+/**
+ * Housekeeping so nothing sits forgotten:
+ *  - an approved request that nobody scheduled gets tomorrow's pickup after 15 minutes;
+ *  - any open request with no movement for 24 hours is flagged for a person once.
+ */
+async function watchdog(db: SupabaseClient, cfg: Record<string, string>): Promise<number> {
+  let n = 0;
+  const { data: open } = await db.from('returns').select('id, status, data').not('status', 'in', '(Completed,Rejected)').limit(200);
+  for (const row of open ?? []) {
+    const r = row.data as ReturnReq & { stuck?: boolean }; const idle = Date.now() - lastActivity(r);
+    if (row.status === 'Approved' && !r.pickupDate && cfg.auto_approve_returns === 'on' && idle > 15 * 60_000) {
+      const p = await moveReturn(db, row.id, 'Pickup scheduled', { pickupDate: ist(1), pickupSlot: '9 am – 1 pm' });
+      if (!('http' in p)) { await log(db, row.id, 'Pickup scheduled automatically', 'It was approved but no pickup had been booked'); n++; }
+      continue;
+    }
+    if (idle > 24 * 3_600_000 && !r.stuck && !(row.status === 'Requested' && r.needsReview)) {
+      const { data: done } = await db.from('returns').update({ data: { ...r, stuck: true } }).eq('id', row.id).eq('status', row.status).select('id');
+      if (done?.length) { await log(db, row.id, 'Stuck for over 24 hours', `Still "${row.status}" with no movement. It needs a person.`, 'review'); n++; }
+    }
+  }
+  return n;
 }
 
 /** Run everything that is due. Never throws: a failure is written to the log. */
@@ -210,6 +270,8 @@ export async function tick(): Promise<{ actions: number }> {
     let actions = await approvals(db, cfg);
     const courier = activeCourier();
     if (courier && cfg.auto_courier === 'on') actions += await couriers(db, courier);
+    actions += await refundSweep(db, cfg);
+    actions += await watchdog(db, cfg);
     return { actions };
   } catch (e) {
     try { await log(serviceClient(), 'automation', 'Error', String((e as Error).message ?? e).slice(0, 300), 'error'); } catch { /* nothing more to do */ }

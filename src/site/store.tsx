@@ -3,7 +3,7 @@ import {
   baseProducts, COD_FEE, EXPRESS_FEE, FREE_SHIPPING_ABOVE, SHIPPING_FEE, sizeStock,
   type Product,
 } from './catalog';
-import { cancelItem as cancelItemRule, cancelWhole as cancelWholeRule, type Cancelled } from './orderCancel';
+import { CUSTOMER_CANCEL_BEFORE, cancelItem as cancelItemRule, cancelWhole as cancelWholeRule, type Cancelled } from './orderCancel';
 import { applyUpdate, currentPiece, requestError, type Update } from './returnRules';
 import { isLive, supabase } from './supabase';
 import { parseW, wkey } from './wishlist';
@@ -56,7 +56,7 @@ export type ReturnReq = {
 };
 export type Refund = { id: number | string; orderId: string; returnId?: string; source: 'cancellation' | 'return'; amount: number; status: 'Pending' | 'Refunded'; note?: string; reference?: string; createdAt: number; processedAt?: number };
 export type Review = { id: string; productId: string; name: string; rating: number; text: string; size: string; fit: string; status: 'Published' | 'Pending' | 'Hidden'; createdAt: number };
-export type Coupon = { code: string; kind: 'percent' | 'flat'; value: number; minSubtotal: number; active: boolean; label: string };
+export type Coupon = { code: string; kind: 'percent' | 'flat'; value: number; minSubtotal: number; active: boolean; label: string; perUserLimit?: number | null };
 
 type Persisted = {
   cart: CartLine[]; wishlist: string[]; couponCode: string; user: User | null; addresses: Address[];
@@ -107,7 +107,13 @@ const run = (q: PromiseLike<unknown>) => { void Promise.resolve(q).catch(() => u
 type RefundRow = { id: number; order_id: string; return_id: string | null; source: Refund['source']; amount: number; status: Refund['status']; note: string | null; reference: string | null; created_at: string; processed_at: string | null };
 const rowToRefund = (x: RefundRow): Refund => ({ id: x.id, orderId: x.order_id, returnId: x.return_id ?? undefined, source: x.source, amount: x.amount, status: x.status, note: x.note ?? undefined, reference: x.reference ?? undefined, createdAt: Date.parse(x.created_at), processedAt: x.processed_at ? Date.parse(x.processed_at) : undefined });
 /** Ask the server to run whatever automation is due (courier booking, auto-approval). Best effort; a scheduler also runs it. */
-const kickAutomation = () => { try { void fetch('/api/v1/automation/kick', { method: 'POST' }).catch(() => undefined); } catch { /* ignore */ } };
+const kickAutomation = () => {
+  try {
+    if (!supabase) return;
+    // only a signed-in customer may nudge the automation (the scheduler also runs it every minute)
+    void supabase.auth.getSession().then(({ data }) => { const t = data.session?.access_token; if (t) void fetch('/api/v1/automation/kick', { method: 'POST', headers: { Authorization: 'Bearer ' + t } }).catch(() => undefined); }).catch(() => undefined);
+  } catch { /* ignore */ }
+};
 const REVIEW_COLS = 'id, product_id, name, rating, body, size, fit, status, created_at';
 
 function initial(): Persisted {
@@ -464,7 +470,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     const cur = state.orders.find((o) => o.id === id);
-    const result = cur && cur.step < 3 ? cancelWholeRule(cur, 'Cancelled by customer', 'customer') : null;
+    const result = cur && cur.step < CUSTOMER_CANCEL_BEFORE ? cancelWholeRule(cur, 'Cancelled by customer', 'customer') : null;
     if (!cur || !result) { say('This order can no longer be cancelled.'); return; }
     localCancel(cur, result, 'Cancelled by customer'); say('Order cancelled');
   };
@@ -645,7 +651,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const saveCouponLocal = (c: Coupon) => setState((s) => ({ ...s, coupons: s.coupons.some((x) => x.code === c.code) ? s.coupons.map((x) => (x.code === c.code ? c : x)) : [...s.coupons, c] }));
 
-  const upsertAdminProduct = (p: Product) => { void adminCall('product.upsert', { product: p }).then((ok) => ok && patchAdmin((d) => ({ ...d, products: d.products.some((x) => x.id === p.id) ? d.products.map((x) => (x.id === p.id ? p : x)) : [...d.products, p] }))); };
+  const upsertAdminProduct = (p: Product) => { void adminCall('product.upsert', { product: p, baseStock: adminData?.products.find((x) => x.id === p.id)?.stock }).then((ok) => ok && patchAdmin((d) => ({ ...d, products: d.products.some((x) => x.id === p.id) ? d.products.map((x) => (x.id === p.id ? p : x)) : [...d.products, p] }))); };
   const setAdminActive = (id: string, active: boolean) => { void adminCall('product.setActive', { id, active }).then((ok) => ok && patchAdmin((d) => ({ ...d, products: d.products.map((x) => (x.id === id ? { ...x, active } : x)) }))); };
   const saveProduct = (p: Product) => { if (adminData) upsertAdminProduct(p); else setState((s) => ({ ...s, edits: { ...s.edits, [p.id]: p } })); };
   const createProduct = (p: Product) => { if (adminData) upsertAdminProduct(p); else setState((s) => ({ ...s, extra: [...s.extra, p] })); };

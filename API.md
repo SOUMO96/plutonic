@@ -31,7 +31,7 @@ Flutter: `supabase_flutter` → `Supabase.instance.client.auth.signInWithPasswor
 | `POST /orders` | yes | **Checkout.** Body: `items[{productId,colourId,size,qty}]`, `coupon`, `delivery` (standard/express), `payment` (upi/card/netbanking/cod), `address`, `email`, `mobile`. Prices, discount, shipping and stock are computed on the server; any client prices are ignored. Returns the order |
 | `GET /orders/track?id=&email=` | – | Guest order lookup (id + email must match) |
 | `GET /orders`, `GET /orders/:id` | yes | The caller's order history / one order (tracking steps are in `step` and `history`) |
-| `POST /orders/:id/cancel` | yes | Cancel before shipping (stock is returned) |
+| `POST /orders/:id/cancel` | yes | Cancel before it ships, i.e. while confirmed or packed (stock is returned; refund is paid automatically) |
 | `GET /returns`, `POST /returns` | yes | List / request a return or exchange for ONE item: `{orderId, itemIndex, kind: return\|exchange, reason, note?, exchangeSize?}`. Delivered orders within 14 days only; one open request per item; an item can be exchanged once (size only, same colour), after that it can only be returned. Each request carries `status`, `history[]`, `pickupDate`/`pickupSlot` and `adminNote` so an app can show a timeline |
 | `GET /refunds` | yes | The caller's refunds: pending or refunded |
 | `POST /reviews` | yes | Submit a review (held for moderation) |
@@ -42,7 +42,7 @@ Flutter: `supabase_flutter` → `Supabase.instance.client.auth.signInWithPasswor
 | `POST /payments/cashfree/session` | optional | Start payment for a pending order: `{orderId, email}` → `{paymentSessionId, mode}` |
 | `GET /payments/cashfree/verify?orderId=` | – | Settle with Cashfree and return `paid` / `pending` / `closed` |
 | `POST /payments/cashfree/webhook` | signature | Cashfree notifications (HMAC-verified; the order is re-checked with Cashfree before being marked paid) |
-| `POST /automation/kick`, `POST /automation/tick` | – / secret | Run whatever fulfilment automation is due (idempotent). `tick` is for a scheduler and checks `x-automation-secret` when `AUTOMATION_SECRET` is set |
+| `POST /automation/kick`, `POST /automation/tick` | yes / secret | Run whatever fulfilment automation is due (idempotent). `kick` needs a signed-in customer's token. `tick` is for a scheduler and requires `x-automation-secret` (it fails closed in production when `AUTOMATION_SECRET` is not set) |
 | `POST /couriers/:name/webhook` | courier signature | Courier tracking updates (501 until an adapter for that courier exists) |
 
 Admin operations are **not** part of this public API. They use `/api/admin/*`, which requires the separate administrator session (see README).

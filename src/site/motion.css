@@ -343,3 +343,13 @@
 @media (max-width: 640px) { .opage--cols .opage-head { flex-direction: column; align-items: flex-start; gap: 14px; } .ostatus { padding-bottom: 0; } .opage--cols .item-thumb { width: 60px; } .opage--cols .oitem-act, .opage--cols .req-note, .opage--cols .oitems > li > .req-form, .opage--cols .oitems > li > .muted.small { margin-left: 0; } }
 .opage--cols .oitems > li > .muted.small { display: block; margin-top: 6px; }
 .dash-main .opage { max-width: none; }
+
+/* Admin sign-in: the button must be visible on the dark page */
+.alogin .btn--light { background: #F2F0EB; color: #090909; border: 1px solid #F2F0EB; } .alogin .btn--light:hover:not(:disabled) { background: #fff; opacity: 1; }
+
+/* "Not found" pages keep the normal page margin (the shared .empty padding used to wipe it out) */
+.pl-wrap.empty, .pl-wrap.empty-page { padding-left: clamp(20px, 5vw, 80px); padding-right: clamp(20px, 5vw, 80px); }
+/* Small links and buttons get a comfortable tap area on phones without changing how they look */
+@media (max-width: 640px) {
+  .pl main .rating, .pl main .opt-head .ulink, .pl main .crumbs a, .pl main .sec-head > a, .pl .collection-link, .pl main .lbl.ulink { display: inline-flex; align-items: center; min-height: 44px; }
+}

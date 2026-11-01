@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { inr, RETURN_WINDOW_DAYS, sizeStock } from '../catalog';
 import { Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Order, type ReturnReq } from '../store';
+import { CUSTOMER_CANCEL_BEFORE } from '../orderCancel';
 import { currentPiece, itemState, RETURN_REASONS } from '../returnRules';
 import { buildJourney } from '../journeys';
 import { Tracker } from '../Tracker';
@@ -123,7 +124,7 @@ function OrderPage({ o }: { o: Order }) {
       <div className="ocard-grid">
         <section>
           <Tracker journey={buildJourney(o, returns, refunds)} />
-          {o.step >= 0 && o.step < 3 && <div className="row-gap ocancel"><button type="button" className="linkbtn small" onClick={() => { if (window.confirm(`Cancel order ${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button></div>}
+          {o.step >= 0 && o.step < CUSTOMER_CANCEL_BEFORE && <div className="row-gap ocancel"><button type="button" className="linkbtn small" onClick={() => { if (window.confirm(`Cancel order ${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button></div>}
         </section>
         <section>
           <ul className="oitems">

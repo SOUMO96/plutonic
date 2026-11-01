@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { ApiError, bearer, clientFor, clientIp, dbFail, limit, readRaw, serviceClient, str, type Ctx } from './lib';
+import { timingSafeEqual } from 'node:crypto';
+import { ApiError, bearer, clientFor, clientIp, dbFail, limit, limitShared, readRaw, serviceClient, str, type Ctx } from './lib';
 import { cashfreeConfigured, cashfreeMode, createSession, fetchSettlement, verifyWebhookSignature } from './cashfree';
 import { applyCourierEvent, tick } from '../automation/engine';
 import { courierByName, type ShipmentRow } from '../courier';
@@ -10,6 +11,8 @@ type Auth = 'none' | 'optional' | 'required';
 type Route = { method: string; parts: string[]; handler: Handler; auth: Auth; bucket: string; max: number; raw?: boolean };
 
 const created = (body: unknown) => ({ __status: 201, body });
+/** Routes where abuse costs money or leaks data: their limits are counted in the database, not per server instance. */
+const SHARED_BUCKETS = new Set(['coupon', 'checkout', 'track', 'pay', 'kick', 'tick']);
 const UUIDISH = /^[\w-]{1,64}$/;
 const routes: Route[] = [];
 function add(method: string, path: string, auth: Auth, handler: Handler, o: { bucket?: string; max?: number; raw?: boolean } = {}) {
@@ -184,10 +187,17 @@ add('POST', '/payments/cashfree/webhook', 'none', async (c) => {
 // ------------------------------------------------------------------ fulfilment automation
 // "Run whatever is due". Idempotent, takes no input, so it is safe to call from the browser right after an order or
 // a return request (so things start at once) and from a scheduler every minute (so they keep moving).
-add('POST', '/automation/kick', 'none', async () => ({ ok: true, ...(await tick()) }), { bucket: 'kick', max: 40, raw: true });
+// kick: a signed-in customer's browser asks for it right after an order or request. Signed-in only, rate limited.
+add('POST', '/automation/kick', 'required', async () => ({ ok: true, ...(await tick()) }), { bucket: 'kick', max: 30, raw: true });
+// tick: the scheduler. Fails closed: with no AUTOMATION_SECRET it only answers on a developer machine.
 add('POST', '/automation/tick', 'none', async (c) => {
   const secret = process.env.AUTOMATION_SECRET;
-  if (secret && c.req.headers['x-automation-secret'] !== secret) throw new ApiError(401, 'unauthorized', 'Bad scheduler secret.');
+  const production = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  if (!secret && production) throw new ApiError(503, 'not_configured', 'AUTOMATION_SECRET is not set.');
+  if (secret) {
+    const given = Buffer.from((c.req.headers['x-automation-secret'] ?? '').toString()), want = Buffer.from(secret);
+    if (given.length !== want.length || !timingSafeEqual(given, want)) throw new ApiError(401, 'unauthorized', 'Bad scheduler secret.');
+  }
   return { ok: true, ...(await tick()) };
 }, { bucket: 'tick', max: 60, raw: true });
 // Couriers that PUSH tracking updates post here. The adapter verifies the signature and translates the payload.
@@ -237,7 +247,8 @@ export async function handleV1(req: IncomingMessage, res: ServerResponse) {
     if (m === null) throw new ApiError(404, 'not_found', 'Unknown endpoint.');
     if (m === 'method') throw new ApiError(405, 'method_not_allowed', 'Method not allowed.');
     const { route, params } = m;
-    const ip = clientIp(req); limit(ip, route.bucket, route.max);
+    const ip = clientIp(req);
+    if (SHARED_BUCKETS.has(route.bucket)) await limitShared(ip, route.bucket, route.max); else limit(ip, route.bucket, route.max);
     const token = bearer(req);
     if (route.auth === 'required' && !token) throw new ApiError(401, 'unauthorized', 'Sign in required.');
     if (!route.raw && route.method !== 'GET' && route.method !== 'DELETE') {

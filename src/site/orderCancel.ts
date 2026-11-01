@@ -16,10 +16,12 @@ export const isOnline = (o: Pick<Order, 'payment' | 'paymentStatus'>) => o.payme
 export type Cancelled = { order: Order; restock: OrderItem[]; whole: boolean };
 
 const open = (o: Order) => o.items.filter((i) => !i.cancelled);
-const canCancel = (o: Order) => o.step >= 0 && o.step < 4;
+/** Customers can cancel until the parcel ships (confirmed or packed). The admin can still cancel until delivery. */
+export const CUSTOMER_CANCEL_BEFORE = 2;
+const canCancel = (o: Order, by: 'admin' | 'customer' = 'admin') => o.step >= 0 && o.step < (by === 'customer' ? CUSTOMER_CANCEL_BEFORE : 4);
 
 export function cancelWhole(o: Order, reason: string, by: 'admin' | 'customer' = 'admin'): Cancelled | null {
-  if (!canCancel(o)) return null;
+  if (!canCancel(o, by)) return null;
   const restock = open(o);
   return {
     whole: true, restock,
@@ -28,7 +30,7 @@ export function cancelWhole(o: Order, reason: string, by: 'admin' | 'customer' =
 }
 
 export function cancelItem(o: Order, index: number, reason: string, by: 'admin' | 'customer' = 'admin'): Cancelled | null {
-  if (!canCancel(o) || !Number.isInteger(index) || index < 0 || index >= o.items.length || o.items[index].cancelled) return null;
+  if (!canCancel(o, by) || !Number.isInteger(index) || index < 0 || index >= o.items.length || o.items[index].cancelled) return null;
   if (open(o).length === 1) return cancelWhole(o, reason, by);    // last open item: the order is cancelled
   const it = o.items[index];
   const line = it.price * it.qty;

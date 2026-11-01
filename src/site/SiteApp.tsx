@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import './site.css';
 import './motion.css';
 import './hover.css';
-import { consumePendingScroll, go, useRoute } from './router';
+import { consumePendingScroll, go, Link, useRoute } from './router';
 import { StoreProvider } from './store';
 import { Footer, Header, Toast } from './ui';
 import Home from './pages/Home';
@@ -56,6 +56,11 @@ function useScrollReveal(path: string) {
 
 function Redirect({ to }: { to: string }) { useEffect(() => { go(to); }, [to]); return null; }
 
+/** Any address the site does not know. */
+function NotFound() {
+  return <div className="pl-wrap empty"><span className="lbl muted">Not found</span><h1 className="h2">That page does not exist.</h1><Link className="btn btn--dark" to="/shop">Browse all pieces</Link></div>;
+}
+
 export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }) {
   const route = useRoute();
   const root = route.seg[0] ?? '';
@@ -95,7 +100,7 @@ export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }
     case 'support': page = <Support />; break;
     // Default deny: only /admin/login is public; every other /admin/* path goes through the server-verified guard.
     case 'admin': page = route.seg[1] === 'login' && route.seg.length === 2 ? <AdminLogin reason={route.query.get('reason')} /> : <AdminGuard />; break;
-    default: page = <Home />;
+    default: page = <NotFound />;
   }
 
   return (

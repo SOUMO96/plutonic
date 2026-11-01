@@ -82,7 +82,7 @@ function ProductEditor({ initial, onClose }: { initial: Product; onClose: () => 
             <label className="btn btn--ghost btn--sm upload">Upload photo<input type="file" accept="image/*" hidden onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const u = await fileToDataUrl(f); set('images', [...p.images, u]); } catch { say('Could not read that image.'); } e.target.value = ''; }} /></label>
           </div>
           <label>Or add an image path / URL<input placeholder="/images/products/men/my-product-front.webp" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const v = e.currentTarget.value.trim(); if (v) { set('images', [...p.images, v]); e.currentTarget.value = ''; } } }} /></label>
-          <span className="muted small">Uploads are resized and stored in this browser for the demo. For production, place files in public/images/products/ and list them in the catalogue.</span></fieldset>
+          <span className="muted small">Photos are resized and saved with the product. For many large photos, place files in public/images/products/ and list them in the catalogue instead.</span></fieldset>
         <div className="row-gap"><label className="check"><input type="checkbox" checked={p.isNew} onChange={(e) => set('isNew', e.target.checked)} />New arrival</label><label className="check"><input type="checkbox" checked={p.bestseller} onChange={(e) => set('bestseller', e.target.checked)} />Bestseller</label><label className="check"><input type="checkbox" checked={p.active} onChange={(e) => set('active', e.target.checked)} />Visible on storefront</label></div>
         {err && <p className="err" role="alert">{err}</p>}
         <div className="row-gap"><button className="btn btn--dark" type="button" onClick={save}>{exists ? 'Save changes' : 'Add product'}</button><button className="btn btn--ghost" type="button" onClick={onClose}>Cancel</button></div>
@@ -299,11 +299,14 @@ export default function Admin() {
   const [cancelFor, setCancelFor] = useState<string | null>(null);
   const [edit, setEdit] = useState<Product | null>(null);
   const [filter, setFilter] = useState('');
-  const [cp, setCp] = useState<Coupon>({ code: '', kind: 'percent', value: 10, minSubtotal: 0, active: true, label: '' });
-  const revenue = s.orders.filter((o) => o.step >= 0).reduce((a, o) => a + o.total, 0);
-  const units = s.orders.filter((o) => o.step >= 0).reduce((a, o) => a + o.items.reduce((n, i) => n + i.qty, 0), 0);
+  const [cp, setCp] = useState<Coupon>({ code: '', kind: 'percent', value: 10, minSubtotal: 0, active: true, label: '', perUserLimit: 1 });
+  // Sales that count: orders that are not cancelled and whose payment is settled (paid, simulated or pay-on-delivery).
+  const counted = s.orders.filter((o) => o.step >= 0 && o.paymentStatus !== 'pending' && o.paymentStatus !== 'failed');
+  const returnedMoney = s.refunds.filter((x) => x.source === 'return').reduce((a, x) => a + x.amount, 0);
+  const revenue = Math.max(0, counted.reduce((a, o) => a + o.total - (o.refundDue ?? 0), 0) - returnedMoney);
+  const units = counted.reduce((a, o) => a + o.items.filter((i) => !i.cancelled).reduce((n, i) => n + i.qty, 0), 0);
   const low = s.allProducts.flatMap((p) => Object.entries(p.stock).filter(([, n]) => n > 0 && n < 5).map(([k, n]) => ({ p, k, n })));
-  const byGender = useMemo(() => { const m: Record<string, number> = { Women: 0, Men: 0 }; s.orders.filter((o) => o.step >= 0).forEach((o) => o.items.forEach((i) => { const p = s.product(i.productId); m[p?.gender === 'men' ? 'Men' : 'Women'] += i.price * i.qty; })); return Object.entries(m) as [string, number][]; }, [s.orders, s.product]);
+  const byGender = useMemo(() => { const m: Record<string, number> = { Women: 0, Men: 0 }; s.orders.filter((o) => o.step >= 0 && o.paymentStatus !== 'pending' && o.paymentStatus !== 'failed').forEach((o) => o.items.filter((i) => !i.cancelled).forEach((i) => { const p = s.product(i.productId); m[p?.gender === 'men' ? 'Men' : 'Women'] += i.price * i.qty; })); return Object.entries(m) as [string, number][]; }, [s.orders, s.product]);
   const byColour = useMemo(() => { const m: Record<string, number> = {}; s.allProducts.forEach((p) => Object.entries(p.stock).forEach(([k, n]) => { const c = COLOURS[k.split(':')[0]]?.name ?? k; m[c] = (m[c] ?? 0) + n; })); return Object.entries(m) as [string, number][]; }, [s.allProducts]);
   const customers = useMemo(() => { const m = new Map<string, { name: string; email: string; orders: number; spent: number }>(); s.orders.forEach((o) => { const k = o.email || o.mobile; const x = m.get(k) ?? { name: o.address.name, email: o.email, orders: 0, spent: 0 }; x.orders += 1; x.spent += o.total; m.set(k, x); }); return [...m.values()]; }, [s.orders]);
   const pendingReturns = s.returns.filter((r) => r.status === 'Requested').length;
@@ -313,7 +316,7 @@ export default function Admin() {
     <div className="admin">
       <aside className="admin-side" aria-label="Admin">
         <Link to="/" className="admin-brand"><img src={LOGO} alt="PLUTONIC" height={40} /><span className="lbl">Admin</span></Link>
-        <nav>{SECTIONS.map((x) => <button key={x} type="button" aria-current={sec === x ? 'page' : undefined} onClick={() => setSec(x)}>{x}{x === 'Returns' && pendingReturns > 0 && <i>{pendingReturns}</i>}{x === 'Automation' && s.returns.filter((y) => y.status === 'Requested' && y.needsReview).length > 0 && <i>{s.returns.filter((y) => y.status === 'Requested' && y.needsReview).length}</i>}{x === 'Refunds' && s.refunds.filter((y) => y.status === 'Pending').length > 0 && <i>{s.refunds.filter((y) => y.status === 'Pending').length}</i>}{x === 'Reviews' && pendingReviews > 0 && <i>{pendingReviews}</i>}</button>)}</nav>
+        <nav>{SECTIONS.map((x) => <button key={x} type="button" aria-current={sec === x ? 'page' : undefined} onClick={() => setSec(x)}>{x}{x === 'Returns' && pendingReturns > 0 && <i aria-label={`${pendingReturns} open`}>{pendingReturns}</i>}{x === 'Automation' && s.returns.filter((y) => y.status === 'Requested' && y.needsReview).length > 0 && <i>{s.returns.filter((y) => y.status === 'Requested' && y.needsReview).length}</i>}{x === 'Refunds' && s.refunds.filter((y) => y.status === 'Pending').length > 0 && <i>{s.refunds.filter((y) => y.status === 'Pending').length}</i>}{x === 'Reviews' && pendingReviews > 0 && <i>{pendingReviews}</i>}</button>)}</nav>
         <Link to="/" className="lbl ulink small">← Back to store</Link>
         <button type="button" className="lbl ulink small admin-signout" onClick={() => { void adminSignOut(); }}>Sign out</button>
       </aside>
@@ -326,15 +329,15 @@ export default function Admin() {
           <details className="panel guide" open>
             <summary className="h3">How to use this dashboard</summary>
             <ol className="guide-list">
-              <li><b>Orders</b> · place an order on the storefront, then open Orders and press “Mark packed”, “Mark shipped”… The customer sees each step on Track an order, and a Delivered order can be returned or exchanged.</li>
+              <li><b>Orders</b> · orders move by themselves: the courier is booked, tracking updates arrive, and the customer sees every step. The “Mark …” buttons are only for overriding, and only work on paid or pay-on-delivery orders. Open Automation to see what it did.</li>
               <li><b>Products</b> · “Add product” (name, collection, category, prices, colours, sizes, stock per colour and size, photos). It appears on the storefront straight away. “Edit” changes anything; “Hide” removes it from the shop without deleting it.</li>
               <li><b>Inventory</b> · stock totals by size. Amber means fewer than 10 units. Change exact units in Products → Edit.</li>
               <li><b>Coupons</b> · create a code, then try it in the bag. Disable a code at any time.</li>
               <li><b>Returns and Reviews</b> · approve or reject customer requests; publish or hide reviews.</li>
             </ol>
-            <p className="muted small">Signing in is verified by the server. The dashboard data itself is a demonstration: everything is stored in this browser only, so changes are not shared with other visitors or devices.</p>
+            <p className="muted small">{s.live ? 'Signing in is verified by the server, and everything here is live data from your database.' : 'Signing in is verified by the server. In this preview the data is a demonstration kept in this browser only, so changes are not shared with other visitors or devices.'}</p>
           </details>
-          <div className="kpis"><div><span className="lbl muted">Revenue</span><b>{inr(revenue)}</b></div><div><span className="lbl muted">Orders</span><b>{s.orders.length}</b></div><div><span className="lbl muted">Units sold</span><b>{units}</b></div><div><span className="lbl muted">Avg. order value</span><b>{inr(s.orders.length ? revenue / s.orders.length : 0)}</b></div><div><span className="lbl muted">Open returns</span><b>{pendingReturns}</b></div></div>
+          <div className="kpis"><div><span className="lbl muted">Revenue</span><b>{inr(revenue)}</b></div><div><span className="lbl muted">Orders</span><b>{counted.length}</b></div><div><span className="lbl muted">Units sold</span><b>{units}</b></div><div><span className="lbl muted">Avg. order value</span><b>{inr(counted.length ? revenue / counted.length : 0)}</b></div><div><span className="lbl muted">Open returns</span><b>{pendingReturns}</b></div></div>
           <div className="cols"><section className="panel"><h2 className="h3">Revenue by collection</h2><Bars data={byGender} unit="₹ " /></section><section className="panel"><h2 className="h3">Inventory by colour · units</h2><Bars data={byColour} /></section></div>
           <section className="panel"><h2 className="h3">Low stock (under 5 units)</h2>{low.length === 0 ? <p className="muted">Nothing running low.</p> : <table className="tbl"><tbody>{low.slice(0, 8).map(({ p, k, n }) => <tr key={p.id + k}><td>{p.name}</td><td>{k.replace(':', ' · ')}</td><td>{n} left</td></tr>)}</tbody></table>}</section>
           <section className="panel"><h2 className="h3">Recent orders</h2><OrdersTable limit={5} /></section>
@@ -358,12 +361,13 @@ export default function Admin() {
         {sec === 'Customers' && <section className="panel"><table className="tbl tbl--rows"><thead><tr><th>Customer</th><th>Email</th><th>Orders</th><th>Spent</th></tr></thead><tbody>{customers.map((c) => <tr key={c.email + c.name}><td>{c.name}</td><td>{c.email}</td><td>{c.orders}</td><td>{inr(c.spent)}</td></tr>)}</tbody></table></section>}
 
         {sec === 'Coupons' && <section className="panel">
-          {s.coupons.map((c) => <div key={c.code} className="order-row"><div><b>{c.code} · {c.kind === 'percent' ? c.value + '%' : '₹ ' + c.value} off</b><span className="muted small">{c.label} · min {inr(c.minSubtotal)}</span></div><button className="linkbtn" type="button" onClick={() => s.saveCoupon({ ...c, active: !c.active })}>{c.active ? 'Active · disable' : 'Disabled · enable'}</button></div>)}
+          {s.coupons.map((c) => <div key={c.code} className="order-row"><div><b>{c.code} · {c.kind === 'percent' ? c.value + '%' : '₹ ' + c.value} off</b><span className="muted small">{c.label} · min {inr(c.minSubtotal)} · {c.perUserLimit ? c.perUserLimit + ' use' + (c.perUserLimit > 1 ? 's' : '') + ' per customer' : 'unlimited uses'}</span></div><button className="linkbtn" type="button" onClick={() => s.saveCoupon({ ...c, active: !c.active })}>{c.active ? 'Active · disable' : 'Disabled · enable'}</button></div>)}
           <form className="fgrid" onSubmit={(e) => { e.preventDefault(); if (!/^[A-Z0-9]{4,16}$/.test(cp.code.toUpperCase())) { s.say('Code must be 4–16 letters or digits.'); return; } s.saveCoupon({ ...cp, code: cp.code.toUpperCase(), label: cp.label || (cp.kind === 'percent' ? cp.value + '% off' : '₹ ' + cp.value + ' off') }); setCp({ ...cp, code: '', label: '' }); s.say('Coupon saved'); }}>
             <label>Code<input value={cp.code} onChange={(e) => setCp({ ...cp, code: e.target.value })} /></label>
             <label>Type<select value={cp.kind} onChange={(e) => setCp({ ...cp, kind: e.target.value as Coupon['kind'] })}><option value="percent">Percent</option><option value="flat">Flat ₹</option></select></label>
             <label>Value<input type="number" min={1} value={cp.value} onChange={(e) => setCp({ ...cp, value: Number(e.target.value) })} /></label>
             <label>Minimum subtotal<input type="number" min={0} value={cp.minSubtotal} onChange={(e) => setCp({ ...cp, minSubtotal: Number(e.target.value) })} /></label>
+            <label>Uses per customer<input type="number" min={1} placeholder="Unlimited" value={cp.perUserLimit ?? ''} onChange={(e) => setCp({ ...cp, perUserLimit: e.target.value === '' ? null : Math.max(1, Number(e.target.value)) })} /></label>
             <button className="btn btn--dark btn--sm" type="submit">Create coupon</button></form></section>}
 
         {sec === 'Banners' && <section className="panel"><div className="order-row"><div><b>Home hero · The Quiet Hours</b><span className="muted small">Live · uses /images/banners/men-campaign-studio.webp and women-campaign-milan.webp</span></div></div><div className="order-row"><div><b>Announcement bar</b><span className="muted small">Delivery threshold and exchange window, from the catalogue constants</span></div></div><p className="muted small">Banner editing is read-only in this preview. Replace the files in public/images/banners/ to change the campaign imagery.</p></section>}

@@ -12,6 +12,7 @@
  */
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { adminDb } from './supabaseAdmin';
 
 export const COOKIE_NAME = 'pl_admin';
 export const SESSION_SECONDS = 60 * 60 * 8; // 8 hours, absolute (no sliding renewal)
@@ -42,13 +43,13 @@ const sha = (s: string) => createHash('sha256').update(s).digest();
 const safeEqual = (a: Buffer, b: Buffer) => a.length === b.length && timingSafeEqual(a, b);
 
 // A fixed decoy so the work done is the same whether or not the email matched.
-const DECOY: Parsed = { N: 16384, r: 8, p: 1, salt: Buffer.alloc(16, 7), key: Buffer.alloc(64, 9) };
+const decoyFor = (real: Parsed): Parsed => ({ N: real.N, r: real.r, p: real.p, salt: Buffer.alloc(real.salt.length, 7), key: Buffer.alloc(real.key.length, 9) });
 
 /** Constant-time check of email + password. Always performs one scrypt derivation. */
 export function verifyCredentials(cfg: Config, email: string, password: string): boolean {
   const parsed = parseHash(cfg.hash)!;
   const emailOk = safeEqual(sha(email.trim().toLowerCase()), sha(cfg.email));
-  const target = emailOk ? parsed : DECOY;
+  const target = emailOk ? parsed : decoyFor(parsed);
   const derived = scryptSync(password, target.salt, target.key.length, { N: target.N, r: target.r, p: target.p, maxmem: 256 * 1024 * 1024 });
   const passOk = safeEqual(derived, target.key);
   return emailOk && passOk;
@@ -59,6 +60,11 @@ export function signSession(cfg: Config, now = Date.now()): string {
   const payload = Buffer.from(JSON.stringify({ r: 'admin', s: sha(cfg.email).toString('hex').slice(0, 16), iat: Math.floor(now / 1000), exp: Math.floor(now / 1000) + SESSION_SECONDS, n: randomBytes(8).toString('hex') })).toString('base64url');
   const sig = createHmac('sha256', cfg.secret).update(payload).digest('base64url');
   return `${payload}.${sig}`;
+}
+
+/** Tokens issued before this moment (unix seconds) are refused: set when the administrator signs out. */
+export function sessionIssuedAt(token: string | undefined): number {
+  try { const d = JSON.parse(Buffer.from((token ?? '').split('.')[0], 'base64url').toString('utf8')) as { iat?: number }; return typeof d.iat === 'number' ? d.iat : 0; } catch { return 0; }
 }
 
 /** True only for a token this server signed, that has not expired and matches the current admin. */
@@ -82,7 +88,7 @@ export function parseCookies(header: string | undefined): Record<string, string>
   const out: Record<string, string> = {};
   for (const part of (header ?? '').split(';')) {
     const i = part.indexOf('=');
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i > 0) { const raw = part.slice(i + 1).trim(); let v = raw; try { v = decodeURIComponent(raw); } catch { /* a malformed cookie is just an unusable cookie */ } out[part.slice(0, i).trim()] = v; }
   }
   return out;
 }
@@ -102,11 +108,11 @@ export function send(res: ServerResponse, status: number, body: unknown, headers
   res.end(JSON.stringify(body));
 }
 
-export async function readJson(req: IncomingMessage): Promise<Record<string, unknown> | null> {
+export async function readJson(req: IncomingMessage, maxBytes = 8192): Promise<Record<string, unknown> | null> {
   const preset = (req as IncomingMessage & { body?: unknown }).body;
   if (preset && typeof preset === 'object') return preset as Record<string, unknown>;
   const chunks: Buffer[] = []; let size = 0;
-  for await (const c of req) { size += (c as Buffer).length; if (size > 8192) return null; chunks.push(c as Buffer); }
+  for await (const c of req) { size += (c as Buffer).length; if (size > maxBytes) return null; chunks.push(c as Buffer); }
   try { const v = JSON.parse(Buffer.concat(chunks).toString('utf8')); return v && typeof v === 'object' ? v : null; } catch { return null; }
 }
 
@@ -119,25 +125,61 @@ export function sameOriginJson(req: IncomingMessage): boolean {
   return (req.headers['content-type'] ?? '').toString().toLowerCase().startsWith('application/json');
 }
 
-// Best-effort brute-force throttle (per warm function instance; see README for limits).
+// Brute-force throttle. Counted in the database so it holds across serverless instances; falls back to this
+// instance's memory if the database is unreachable. The client address comes from the platform's own header.
 const attempts = new Map<string, { n: number; first: number }>();
-export function throttled(req: IncomingMessage): boolean {
-  const ip = ((req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'unknown').toString().split(',')[0]).trim();
-  const now = Date.now(), rec = attempts.get(ip);
-  if (!rec || now - rec.first > 15 * 60_000) { attempts.set(ip, { n: 1, first: now }); return false; }
-  rec.n += 1;
-  return rec.n > 8;
+export const clientAddress = (req: IncomingMessage) => {
+  const h = (k: string) => (req.headers[k] ?? '').toString().split(',').map((x) => x.trim()).filter(Boolean);
+  return h('x-vercel-forwarded-for')[0] ?? h('x-real-ip')[0] ?? h('x-forwarded-for').pop() ?? req.socket.remoteAddress ?? 'unknown';
+};
+async function hit(key: string, windowSeconds: number, max: number): Promise<boolean> {
+  const db = adminDb();
+  if (db) { const { data, error } = await db.rpc('rate_hit', { p_key: key, p_window_seconds: windowSeconds, p_max: max }); if (!error && typeof data === 'boolean') return data; }
+  const now = Date.now(), rec = attempts.get(key);
+  if (!rec || now - rec.first > windowSeconds * 1000) { attempts.set(key, { n: 1, first: now }); return true; }
+  return ++rec.n <= max;
 }
-export const clearThrottle = (req: IncomingMessage) => { attempts.delete(((req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'unknown').toString().split(',')[0]).trim()); };
+/** True when this sign-in attempt should be refused (too many from this address, for this email, or overall). */
+export async function throttled(req: IncomingMessage, email = ''): Promise<boolean> {
+  const ip = clientAddress(req);
+  const okIp = await hit('login:ip:' + ip, 900, 30);
+  const okEmail = await hit('login:email:' + sha(email.trim().toLowerCase()).toString('hex').slice(0, 24), 900, 20);
+  const okAll = await hit('login:all', 900, 300);
+  return !(okIp && okEmail && okAll);
+}
+
+// ---------------------------------------------------------------- sign-out really signs out
+let revokedCache: { at: number; before: number } | null = null;
+async function revokedBefore(): Promise<number> {
+  if (revokedCache && Date.now() - revokedCache.at < 10_000) return revokedCache.before;
+  const db = adminDb();
+  let before = revokedCache?.before ?? 0;
+  if (db) { const { data } = await db.from('app_settings').select('value').eq('key', 'admin_revoked_before').maybeSingle(); before = Number(data?.value ?? 0) || 0; }
+  revokedCache = { at: Date.now(), before }; return before;
+}
+export async function revokeSessions() {
+  const now = Math.floor(Date.now() / 1000);
+  const db = adminDb(); if (db) await db.from('app_settings').upsert({ key: 'admin_revoked_before', value: String(now) });
+  revokedCache = { at: Date.now(), before: now };
+}
+
+/** Same check as requireAdmin without sending a response. */
+export async function requireAdminQuiet(req: IncomingMessage): Promise<'ok' | 'no' | 'unconfigured'> {
+  const cfg = readConfig();
+  if (!cfg) return 'unconfigured';
+  const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
+  return verifySession(cfg, token) && sessionIssuedAt(token) > (await revokedBefore()) ? 'ok' : 'no';
+}
 
 /**
  * Reusable guard for every admin API endpoint, present and future:
  *   const cfg = requireAdmin(req, res); if (!cfg) return;
  * Sends 401/503 and returns null unless the request carries a valid administrator session.
  */
-export function requireAdmin(req: IncomingMessage, res: ServerResponse) {
+export async function requireAdmin(req: IncomingMessage, res: ServerResponse) {
   const cfg = readConfig();
   if (!cfg) { send(res, 503, { error: 'admin_not_configured' }); return null; }
-  if (!verifySession(cfg, parseCookies(req.headers.cookie)[COOKIE_NAME])) { send(res, 401, { error: 'unauthorized' }); return null; }
+  const token = parseCookies(req.headers.cookie)[COOKIE_NAME];
+  if (!verifySession(cfg, token) || sessionIssuedAt(token) <= (await revokedBefore())) { send(res, 401, { error: 'unauthorized' }); return null; }
   return cfg;
 }

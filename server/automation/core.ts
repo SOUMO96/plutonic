@@ -21,8 +21,14 @@ export async function readSettings(db: SupabaseClient): Promise<Record<string, s
   return out;
 }
 
-/** Move an order forward to `step` (never backwards), filling the history for every step passed. */
-export async function setOrderStep(db: SupabaseClient, orderId: string, step: number): Promise<boolean> {
+/** Log a line only if this exact subject+action has not been logged before (keeps the log free of once-a-minute repeats). */
+export async function logOnce(db: SupabaseClient, subject: string, action: string, detail?: string, level: Level = 'info') {
+  const { count } = await db.from('automation_log').select('id', { count: 'exact', head: true }).eq('subject', subject).eq('action', action);
+  if (!count) await log(db, subject, action, detail, level);
+}
+
+/** Move an order forward to `step` (never backwards), filling the history for every step passed. `extra` is saved in the same write. */
+export async function setOrderStep(db: SupabaseClient, orderId: string, step: number, extra: Record<string, unknown> = {}): Promise<boolean> {
   const { data } = await db.from('orders').select('data').eq('id', orderId).maybeSingle();
   if (!data) return false;
   const o = data.data as Order;
@@ -31,7 +37,7 @@ export async function setOrderStep(db: SupabaseClient, orderId: string, step: nu
   // never earlier than the previous step, even if this computer's clock runs behind the database's
   const now = Math.max(Date.now(), history[history.length - 1] ?? 0);
   while (history.length <= step) history.push(now);
-  const { data: moved } = await db.from('orders').update({ data: { ...o, step, history } }).eq('id', orderId).eq('data->>step', String(o.step)).select('id');
+  const { data: moved } = await db.from('orders').update({ data: { ...o, ...extra, step, history } }).eq('id', orderId).eq('data->>step', String(o.step)).select('id');
   return !!moved?.length;
 }
 
@@ -74,4 +80,23 @@ export async function moveReturn(db: SupabaseClient, id: string, status: ReturnR
     }
   }
   return { ok: true, ret: upd.ret };
+}
+
+/**
+ * An exchange whose replacement size ran out after the customer's item was already collected: turn it into a
+ * return and refund it (the original piece goes back on the shelf, the refund is recorded), and tell the customer why.
+ */
+export async function exchangeToRefund(db: SupabaseClient, id: string, why: string): Promise<Moved> {
+  const { data: row } = await db.from('returns').select('data, order_id, status').eq('id', id).maybeSingle();
+  if (!row) return { ok: false, http: 404, error: 'not_found', message: 'Request not found.' };
+  const r = row.data as ReturnReq;
+  if (r.kind !== 'exchange' || row.status !== 'Picked up') return { ok: false, http: 409, error: 'invalid_transition', message: 'Only a collected exchange can be changed to a refund.' };
+  const { data: ord } = await db.from('orders').select('data').eq('id', row.order_id).maybeSingle();
+  const item = ord?.data?.items?.[r.itemIndex ?? -1];
+  if (!item) return { ok: false, http: 409, error: 'invalid_transition', message: 'The item could not be found on the order.' };
+  const line = item.price * item.qty, share = ord!.data.subtotal > 0 ? Math.round((ord!.data.discount * line) / ord!.data.subtotal) : 0;
+  const next = { ...r, kind: 'return' as const, exchangeTo: undefined, refundAmount: line - share, adminNote: why };
+  const { data: done } = await db.from('returns').update({ data: next }).eq('id', id).eq('status', 'Picked up').select('id');
+  if (!done?.length) return { ok: false, http: 409, error: 'changed', message: 'This request was just updated.' };
+  return moveReturn(db, id, 'Completed', { note: why });
 }
