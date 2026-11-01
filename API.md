@@ -3,7 +3,7 @@
 One reusable backend for the web storefront today and a Flutter (Android/iOS) app later. Same Supabase database, same accounts, same inventory and coupons. No UI code lives in the API.
 
 - Base URL: `https://<your-site>/api/v1` (locally `http://localhost:3000/api/v1`)
-- Code: `server/v1/` (routes, rules, Cashfree), served by the single function `api/v1/[...path].ts`
+- Code: `server/v1/` (routes, rules, Cashfree), served by the single function `api/v1/index.ts (vercel.json rewrites every /api/v1/* path to it)`
 - Format: JSON in and out. `POST/PUT/PATCH` need `Content-Type: application/json`.
 - Errors: `{ "error": { "code": "...", "message": "..." } }` with the matching HTTP status (400 invalid, 401 sign in, 404, 405, 409, 413, 415, 422 rejected by a business rule, 429 rate limited, 5xx).
 - Money is integer rupees. Product/order objects use the same shapes as the web app (`src/site/catalog.ts`, `store.tsx`).
