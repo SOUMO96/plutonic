@@ -12,7 +12,9 @@ type Route = { method: string; parts: string[]; handler: Handler; auth: Auth; bu
 
 const created = (body: unknown) => ({ __status: 201, body });
 /** Routes where abuse costs money or leaks data: their limits are counted in the database, not per server instance. */
-const SHARED_BUCKETS = new Set(['coupon', 'checkout', 'track', 'pay', 'kick', 'tick']);
+const SHARED_BUCKETS = new Set(['coupon', 'checkout', 'track', 'pay', 'kick', 'tick', 'signup']);
+/** While testing, new accounts are active at once (no emailed code). Set REQUIRE_EMAIL_VERIFICATION=on to switch the emailed code back on. */
+const instantSignup = () => process.env.REQUIRE_EMAIL_VERIFICATION !== 'on';
 const UUIDISH = /^[\w-]{1,64}$/;
 const routes: Route[] = [];
 function add(method: string, path: string, auth: Auth, handler: Handler, o: { bucket?: string; max?: number; raw?: boolean; cache?: string } = {}) {
@@ -27,7 +29,7 @@ add('GET', '/config', 'none', async () => {
   // Safe automatic retries of an order need the idempotency column (migration 011); say so only when it exists.
   let idempotentOrders = false;
   try { const { error } = await serviceClient().from('orders').select('idempotency_key').limit(0); idempotentOrders = !error; } catch { /* leave false */ }
-  return { version: 'v1', payments: { cashfree: cashfreeConfigured(), mode: cashfreeConfigured() ? cashfreeMode() : null }, features: { idempotentOrders } };
+  return { version: 'v1', payments: { cashfree: cashfreeConfigured(), mode: cashfreeConfigured() ? cashfreeMode() : null }, features: { idempotentOrders, instantSignup: instantSignup() } };
 }, { cache: PUBLIC_CACHE });
 // Uptime monitors call this. It touches the database with one tiny query and says how long that took.
 add('GET', '/health', 'none', async ({ db }) => {
@@ -102,6 +104,22 @@ add('POST', '/reviews', 'required', async (c) => {
 }, { bucket: 'write', max: 20 });
 
 // ------------------------------------------------------------------ account
+// Create an account that is already active, so the customer never waits for an emailed code (testing phase).
+add('POST', '/auth/signup', 'none', async (c) => {
+  if (!instantSignup()) throw new ApiError(404, 'not_found', 'Unknown endpoint.');
+  const b = await c.body();
+  const email = String(b.email ?? '').trim().toLowerCase(), password = String(b.password ?? '');
+  if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new ApiError(400, 'invalid', 'Enter a valid email address.');
+  if (password.length < 8 || password.length > 72) throw new ApiError(400, 'invalid', 'Use a password of 8 to 72 characters.');
+  const clean = (v: unknown, n: number) => String(v ?? '').trim().slice(0, n);
+  const meta = { first_name: clean(b.firstName, 60), last_name: clean(b.lastName, 60), mobile: clean(b.mobile, 15).replace(/\D/g, '') };
+  const { error } = await serviceClient().auth.admin.createUser({ email, password, email_confirm: true, user_metadata: meta });
+  if (error) {
+    if (/already|registered|exists/i.test(error.message)) throw new ApiError(409, 'exists', 'An account with this email already exists. Try logging in.');
+    throw new ApiError(422, 'rejected', 'We could not create that account. Check the email address and try again.');
+  }
+  return created({ ok: true });
+}, { bucket: 'signup', max: 6 });
 add('GET', '/me', 'required', async (c) => {
   const u = await c.user();
   const p = must(await c.db.from('profiles').select('*').eq('id', u.id).maybeSingle()) as any;
