@@ -19,28 +19,34 @@ export function deliveryLine(o: Order): string {
   if (o.step === 4) return `Delivered ${day(o.history[4] ?? o.createdAt)}`;
   return `Arriving by ${day(o.createdAt + (o.delivery === 'express' ? 2 : 5) * DAY)}`;
 }
+/** The one plain line that says where an order stands (an open return or exchange wins over "Delivered"). */
+export function orderLine(o: Order, returns: ReturnReq[]): string {
+  if (o.step < 0) return 'Cancelled';
+  const open = returns.find((r) => r.orderId === o.id && r.status !== 'Completed' && r.status !== 'Rejected');
+  return open ? `${open.kind === 'exchange' ? 'Exchange' : 'Return'} in progress` : deliveryLine(o);
+}
 const statusOf = (o: Order) => (o.step < 0 ? 'Cancelled' : o.step === 4 ? 'Delivered' : o.step === 3 ? 'Out for delivery' : ORDER_STEPS[o.step]);
 
-/** The itemised bill: every line, discount, shipping and fees add up to the total. */
-export function OrderBill({ o }: { o: Order }) {
-  const open = o.items.filter((i) => !i.cancelled);
+/** One calm line for the total; the full bill (every line adding up) is one tap away. */
+export function OrderSummary({ o }: { o: Order }) {
+  const pay = o.payment === 'cod' ? 'Pay on delivery' : o.payment === 'upi' ? 'UPI' : o.payment === 'card' ? 'Card' : 'Net banking';
+  const n = o.items.reduce((c, i) => c + i.qty, 0);
   return (
-    <div className="bill" aria-label="Bill">
-      <h3 className="lbl muted">Bill</h3>
-      <table className="bill-lines"><thead><tr><th>Item</th><th>Price</th><th>Qty</th><th>Amount</th></tr></thead><tbody>
-        {o.items.map((i, n) => <tr key={n} className={i.cancelled ? 'is-cancelled' : undefined}><td><b>{i.name}</b><small className="muted">{i.colourName} · {i.size}{i.cancelled ? ' · Cancelled' : ''}</small></td><td>{inr(i.price)}</td><td>{i.qty}</td><td>{inr(i.price * i.qty)}</td></tr>)}
-      </tbody></table>
-      <dl className="sum">
-        <div><dt>Item total ({o.items.reduce((n, i) => n + i.qty, 0)} items)</dt><dd>{inr(o.subtotal)}</dd></div>
-        {o.discount > 0 && <div><dt>Discount{o.couponCode ? ` (${o.couponCode})` : ''}</dt><dd>− {inr(o.discount)}</dd></div>}
-        <div><dt>Delivery · {o.delivery === 'express' ? 'Express' : 'Standard'}</dt><dd>{o.shipping === 0 ? 'Free' : inr(o.shipping)}</dd></div>
-        {o.codFee > 0 && <div><dt>Cash on delivery fee</dt><dd>{inr(o.codFee)}</dd></div>}
-        <div><dt>Tax (GST)</dt><dd className="muted">Included in prices</dd></div>
-      </dl>
-      <div className="sum-total"><b>{o.payment === 'cod' ? 'Total to pay on delivery' : 'Total paid'}</b><b>{inr(o.total)}</b></div>
-      <p className="muted small">Payment: {o.payment === 'cod' ? 'Pay on delivery' : o.payment === 'upi' ? 'UPI' : o.payment === 'card' ? 'Card' : 'Net banking'}{o.paymentStatus === 'paid' ? ' · received' : ''}{open.length < o.items.length ? ` · ${o.items.length - open.length} item(s) cancelled` : ''}</p>
-      {(o.refundDue ?? 0) > 0 && <p className="note" role="note">Refund for cancelled items: {inr(o.refundDue ?? 0)}</p>}
-    </div>
+    <section className="osum" aria-label="Payment">
+      <div className="osum-total"><span>{o.payment === 'cod' ? 'Total to pay on delivery' : 'Total paid'}</span><b>{inr(o.total)}</b></div>
+      <p className="muted small">{pay}{o.paymentStatus === 'paid' ? ' · payment received' : ''}</p>
+      <details className="bill">
+        <summary>View bill</summary>
+        <dl className="sum">
+          <div><dt>Items ({n})</dt><dd>{inr(o.subtotal)}</dd></div>
+          {o.discount > 0 && <div><dt>Discount{o.couponCode ? ` (${o.couponCode})` : ''}</dt><dd>− {inr(o.discount)}</dd></div>}
+          <div><dt>Delivery · {o.delivery === 'express' ? 'Express' : 'Standard'}</dt><dd>{o.shipping === 0 ? 'Free' : inr(o.shipping)}</dd></div>
+          {o.codFee > 0 && <div><dt>Cash on delivery fee</dt><dd>{inr(o.codFee)}</dd></div>}
+        </dl>
+        <div className="sum-total"><b>Total</b><b>{inr(o.total)}</b></div>
+        <p className="muted small">Prices include GST.{(o.refundDue ?? 0) > 0 ? ` Refund for cancelled items: ${inr(o.refundDue ?? 0)}.` : ''}</p>
+      </details>
+    </section>
   );
 }
 
@@ -100,7 +106,7 @@ function requestNote(r: ReturnReq): string {
     case 'Approved': return `Your ${what} request ${r.id} was approved. We will book the pickup shortly.`;
     case 'Pickup scheduled': return r.pickupDate ? `Pickup booked for ${longDay(r.pickupDate)}, ${r.pickupSlot ?? ''}.` : 'Pickup booked.';
     case 'Picked up': return r.kind === 'exchange' ? 'We have your item and are preparing your replacement.' : 'We have your item. Your refund is being prepared.';
-    default: return 'Your replacement is on its way. Follow it in the tracking.';
+    default: return 'Your replacement is on its way.';
   }
 }
 
@@ -109,70 +115,76 @@ function OrderPage({ o }: { o: Order }) {
   const [req, setReq] = useState<number | null>(null);
   const orderRefunds = refunds.filter((x) => x.orderId === o.id);
   return (
-    <section className="panel opage">
-      <Link to="/account?tab=orders" className="lbl ulink small">← All orders</Link>
-      <div className="opage-head"><div><h2 className="h2">Order #{o.id}</h2><p className="muted">Placed {when(o.createdAt)} · {deliveryLine(o)}</p></div><span className={'status' + (o.step < 0 ? ' status--bad' : '')}>{statusOf(o)}</span></div>
-      <div className="ocard-grid">
-        <section>
-          <Tracker journey={buildJourney(o, returns, refunds)} />
-          {o.step >= 0 && o.step < 3 && <div className="row-gap"><button type="button" className="btn btn--ghost btn--sm" onClick={() => { if (window.confirm(`Cancel order #${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button><span className="muted small">You can cancel until the order ships.</span></div>}
-          {o.step === 3 && <p className="muted small">This order is out for delivery, so it can no longer be cancelled. You can return or exchange items after delivery.</p>}
-        </section>
-        <section>
-          <h3 className="lbl muted">Items</h3>
-          <ul className="oitems">
-            {o.items.map((i, n) => {
-              const p = product(i.productId); const st = itemState(o, n, returns);
-              const declined = !st.open ? returns.filter((r) => r.orderId === o.id && r.itemIndex === n && r.status === 'Rejected').sort((a, b) => b.createdAt - a.createdAt)[0] : undefined;
-              const stale = declined && returns.some((r) => r.orderId === o.id && r.itemIndex === n && r.createdAt > declined.createdAt);
-              return (
-                <li key={n} className={i.cancelled ? 'is-cancelled' : undefined}>
-                  <div className="oitem-row">{p && <span className="item-thumb"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span>}<span className="oitem-text"><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small><small>{inr(i.price * i.qty)}</small></span></div>
-                  {st.open && <p className="req-note" role="status">{requestNote(st.open)}</p>}
-                  {declined && !stale && <p className="req-note req-note--bad">Your earlier request was declined{declined.adminNote ? `: ${declined.adminNote}` : '.'}</p>}
-                  {!i.cancelled && o.step === 4 && st.canReturn && req !== n && <button type="button" className="btn btn--ghost btn--sm" onClick={() => setReq(n)}>{st.canExchange ? 'Return or exchange' : 'Return this item'}</button>}
-                  {!i.cancelled && o.step === 4 && !st.open && st.note && req !== n && <span className="muted small">{st.note}</span>}
-                  {req === n && <RequestPanel order={o} index={n} canExchange={st.canExchange} onClose={() => setReq(null)} />}
-                </li>
-              );
-            })}
-          </ul>
-          {o.step === 4 && <p className="muted small">Return or exchange within {RETURN_WINDOW_DAYS} days of delivery.</p>}
-          {orderRefunds.length > 0 && <div className="refund-box">{orderRefunds.map((x) => <p key={x.id} className="note" role="note">Refund {inr(x.amount)} · {x.source === 'cancellation' ? 'cancelled items' : 'returned item'} · <b>{x.status === 'Refunded' ? 'Sent' + (x.reference ? ` (ref ${x.reference})` : '') : 'Being processed'}</b></p>)}</div>}
-          <OrderBill o={o} />
-          <p className="muted small">Shipping to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state}</p>
-          <Link to="/support" className="lbl ulink small">Need help with this order?</Link>
-        </section>
-      </div>
+    <section className="opage">
+      <Link to="/account?tab=orders" className="opage-back">← All orders</Link>
+      <header className="opage-head">
+        <p className="muted small">Order {o.id} · placed {day(o.createdAt)}</p>
+        <h2 className="h3">{orderLine(o, returns)}</h2>
+      </header>
+
+      <Tracker journey={buildJourney(o, returns, refunds)} />
+
+      <section className="opage-block" aria-label="Items">
+        <ul className="oitems">
+          {o.items.map((i, n) => {
+            const p = product(i.productId); const st = itemState(o, n, returns);
+            const declined = !st.open ? returns.filter((r) => r.orderId === o.id && r.itemIndex === n && r.status === 'Rejected').sort((a, b) => b.createdAt - a.createdAt)[0] : undefined;
+            const stale = declined && returns.some((r) => r.orderId === o.id && r.itemIndex === n && r.createdAt > declined.createdAt);
+            return (
+              <li key={n} className={i.cancelled ? 'is-cancelled' : undefined}>
+                <div className="oitem-row">{p && <span className="item-thumb"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span>}<span className="oitem-text"><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span className="oitem-price">{inr(i.price * i.qty)}</span></div>
+                {st.open && <p className="req-note" role="status">{requestNote(st.open)}</p>}
+                {declined && !stale && <p className="req-note req-note--bad">Your earlier request was declined{declined.adminNote ? `: ${declined.adminNote}` : '.'}</p>}
+                {!i.cancelled && o.step === 4 && st.canReturn && req !== n && <button type="button" className="linkbtn oitem-act" onClick={() => setReq(n)}>{st.canExchange ? 'Return or exchange' : 'Return this item'}</button>}
+                {!i.cancelled && o.step === 4 && !st.open && st.note && req !== n && <span className="muted small">{st.note}</span>}
+                {req === n && <RequestPanel order={o} index={n} canExchange={st.canExchange} onClose={() => setReq(null)} />}
+              </li>
+            );
+          })}
+        </ul>
+        {o.step === 4 && <p className="muted small">Free returns and exchanges within {RETURN_WINDOW_DAYS} days of delivery.</p>}
+      </section>
+
+      <OrderSummary o={o} />
+      {orderRefunds.map((x) => <p key={x.id} className="muted small oref">Refund {inr(x.amount)} · {x.status === 'Refunded' ? 'sent' + (x.reference ? ` (ref ${x.reference})` : '') : 'being processed'}</p>)}
+
+      <footer className="opage-foot">
+        <p className="muted small">Delivering to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state}</p>
+        <div className="opage-links">
+          <Link to="/support" className="ulink small">Need help with this order?</Link>
+          {o.step >= 0 && o.step < 3 && <button type="button" className="linkbtn small" onClick={() => { if (window.confirm(`Cancel order ${o.id}? Your items are released${o.payment === 'cod' ? '.' : ' and a refund is recorded.'}`)) cancelOrder(o.id); }}>Cancel order</button>}
+        </div>
+      </footer>
     </section>
   );
 }
 
-/** A tappable summary of one order: photos, estimated delivery date, price. */
+/** One order as a quiet row: photo, name, one plain status line, price. */
 function OrderWidget({ o }: { o: Order }) {
-  const { product } = useStore();
-  const shown = o.items.slice(0, 3);
-  const first = o.items[0];
-  const count = o.items.reduce((n, i) => n + i.qty, 0);
+  const { product, returns } = useStore();
+  const first = o.items[0]; const p = product(first.productId);
+  const line = orderLine(o, returns);
+  const more = o.items.length - 1;
   return (
-    <Link to={`/account?tab=orders&order=${o.id}`} className="owidget" aria-label={`Order ${o.id}: ${first.name}, ${deliveryLine(o)}, ${inr(o.total)}`}>
-      <span className="owidget-photos">{shown.map((i, n) => { const p = product(i.productId); return p ? <span key={n} className="owidget-ph"><Photo p={p} ratio="4 / 5" colourId={i.colourId} /></span> : null; })}</span>
+    <Link to={`/account?tab=orders&order=${o.id}`} className="owidget" aria-label={`Order ${o.id}: ${first.name}, ${line}, ${inr(o.total)}`}>
+      <span className="owidget-ph">{p && <Photo p={p} ratio="4 / 5" colourId={first.colourId} />}</span>
       <span className="owidget-body">
-        <b>{first.name}{o.items.length > 1 ? ` + ${o.items.length - 1} more` : ''}</b>
-        <small className="muted">Order #{o.id} · {count} item{count > 1 ? 's' : ''}</small>
-        <span className={'owidget-eta' + (o.step < 0 ? ' bad' : '')}>{deliveryLine(o)}</span>
+        <b>{first.name}{more > 0 ? ` + ${more} more` : ''}</b>
+        <span className={'owidget-eta' + (o.step < 0 ? ' bad' : '')}>{line}</span>
+        <small className="muted">{o.id}</small>
       </span>
-      <span className="owidget-side"><b>{inr(o.total)}</b><span className={'status' + (o.step < 0 ? ' status--bad' : '')}>{statusOf(o)}</span></span>
-      <ChevronRight size={18} aria-hidden="true" className="owidget-go" />
+      <b className="owidget-price">{inr(o.total)}</b>
+      <ChevronRight size={16} aria-hidden="true" className="owidget-go" />
     </Link>
   );
 }
 
-/** Orders: a list of widgets; selecting one opens that order with its tracking, items and bill. */
+/** Orders: a quiet list; select one to open it. */
 export function MyOrders({ route }: { route: Route }) {
   const { orders, refreshAccount } = useStore();
   const focus = route.query.get('order');
-  // Keep this page in step with the server: when the admin approves, schedules or ships, it shows here by itself (live push, with a 4-second check as backup).
+  // Keep this page in step with the server: when the admin approves, schedules or ships, it shows here by itself
+  // (live push from the database, with a 4-second check as backup).
   useEffect(() => {
     void refreshAccount();
     const tick = () => { if (!document.hidden) void refreshAccount(); };
@@ -182,12 +194,11 @@ export function MyOrders({ route }: { route: Route }) {
   const list = [...orders].sort((a, b) => b.createdAt - a.createdAt);
   if (focus) {
     const o = orders.find((x) => x.id === focus);
-    return o ? <OrderPage o={o} /> : <section className="panel"><p className="muted">We couldn’t find that order.</p><Link to="/account?tab=orders" className="btn btn--dark btn--sm">All orders</Link></section>;
+    return o ? <OrderPage o={o} /> : <section className="opage"><p className="muted">We couldn’t find that order.</p><Link to="/account?tab=orders" className="ulink small">← All orders</Link></section>;
   }
-  if (!list.length) return <section className="panel"><h2 className="h3">Orders</h2><p className="muted">No orders yet.</p><Link className="btn btn--dark btn--sm" to="/shop">Start shopping</Link></section>;
+  if (!list.length) return <section className="opage"><h2 className="h3">Orders</h2><p className="muted">No orders yet.</p><Link className="btn btn--dark btn--sm" to="/shop">Start shopping</Link></section>;
   return (
-    <section className="panel"><h2 className="h3">Orders</h2>
-      <p className="muted small">Select an order to see its tracking and bill, cancel it, or return or exchange an item.</p>
+    <section className="opage"><h2 className="h3">Orders</h2>
       <div className="ocards">{list.map((o) => <OrderWidget key={o.id} o={o} />)}</div>
     </section>
   );

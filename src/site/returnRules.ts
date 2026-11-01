@@ -98,7 +98,7 @@ export function itemState(o: Order, itemIndex: number, returns: ReturnReq[], now
   if (o.step !== 4) return { ...base, canReturn: false, canExchange: false };
   // Only one return/exchange may be in progress on an order. Finish (or have it declined) before starting another.
   const otherOpen = returns.find((r) => r.orderId === o.id && r.itemIndex !== itemIndex && isOpen(r));
-  if (otherOpen && !open) return { ...base, canReturn: false, canExchange: false, note: `Request ${otherOpen.id} on this order is still in progress. You can start a new one when it is finished.` };
+  if (otherOpen && !open) return { ...base, canReturn: false, canExchange: false, note: `Request ${otherOpen.id} is still in progress. You can start another once it finishes.` };
   if (returned) return { ...base, canReturn: false, canExchange: false, note: 'Returned. Please place a new order if you would like it again.' };
   if (open) return { ...base, canReturn: false, canExchange: false };
   if (now > windowEndsAt) return { ...base, canReturn: false, canExchange: false, note: 'Return window closed' };

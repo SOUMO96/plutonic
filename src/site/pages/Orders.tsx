@@ -5,6 +5,7 @@ import { go, Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Order } from '../store';
 import { Photo, ProductCard } from '../ui';
 import { buildJourney } from '../journeys';
+import { OrderSummary, orderLine } from './MyOrders';
 import { parseW } from '../wishlist';
 import { Tracker } from '../Tracker';
 
@@ -35,19 +36,15 @@ export function Tracking({ route }: { route: Route }) {
       )}
       {route.seg[1] && !o && (!live || looked === 'none') && <p className="err" role="alert">We couldn’t find an order called “{route.seg[1]}”{live ? ' for that email' : ''}.</p>}
       {o && (
-        <div className="track-grid">
-          <section>
-            <h1 className="h1">{o.step < 0 ? 'Cancelled' : o.step === 4 ? 'Delivered' : o.step === 3 ? 'Out for delivery' : ORDER_STEPS[o.step]}</h1>
-            <p className="muted">Order #{o.id} · Placed {when(o.createdAt)}{o.sample ? ' · sample order' : ''}</p>
-            <Tracker journey={buildJourney(o, returns, refunds)} />
-            <div className="row-gap">{o.step >= 0 && o.step < 3 && <button type="button" className="btn btn--ghost btn--sm" onClick={() => { cancelOrder(o.id); say('Order cancelled'); }}>Cancel order</button>}<Link to="/support" className="lbl ulink">Need help with this order?</Link></div>
+        <div className="opage">
+          <header className="opage-head"><p className="muted small">Order {o.id} · placed {when(o.createdAt)}</p><h2 className="h3">{orderLine(o, returns)}</h2></header>
+          <Tracker journey={buildJourney(o, returns, refunds)} />
+          <section className="opage-block" aria-label="Items">
+            <ul className="oitems">{o.items.map((i, n) => <li key={n} className={i.cancelled ? 'is-cancelled' : undefined}><div className="oitem-row"><span className="oitem-text"><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span className="oitem-price">{inr(i.price * i.qty)}</span></div></li>)}</ul>
           </section>
-          <aside className="summary"><span className="lbl muted">In this order</span>
-            <ul className="co-items">{o.items.map((i) => <li key={i.productId + i.size + i.colourName} className={i.cancelled ? 'is-cancelled' : undefined}><span><b>{i.name}</b><small className="muted">{i.colourName} · {i.size} · Qty {i.qty}{i.cancelled ? ' · Cancelled' : ''}</small></span><span>{inr(i.price * i.qty)}</span></li>)}</ul>
-            {o.refundDue ? <p className="note" role="note">A refund of {inr(o.refundDue)} is due for cancelled items{o.cancelReason ? ` (${o.cancelReason})` : ''} and will be returned to your original payment method.</p> : null}
-            <div className="sum-total"><b>Total paid</b><b>{inr(o.total)}</b></div>
-            <dl className="sum"><div><dt>Payment</dt><dd>{o.payment === 'cod' ? 'Pay on delivery' : 'Paid · ' + o.payment.toUpperCase()}</dd></div><div><dt>Delivery</dt><dd>{o.delivery === 'express' ? 'Express' : 'Standard'}</dd></div><div><dt>Shipping to</dt><dd>{o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}</dd></div></dl>
-          </aside>
+          <OrderSummary o={o} />
+          <footer className="opage-foot"><p className="muted small">Delivering to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}</p>
+            <div className="opage-links"><Link to="/support" className="ulink small">Need help with this order?</Link>{o.step >= 0 && o.step < 3 && <button type="button" className="linkbtn small" onClick={() => { cancelOrder(o.id); say('Order cancelled'); }}>Cancel order</button>}</div></footer>
         </div>
       )}
     </div>
