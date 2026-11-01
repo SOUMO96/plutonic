@@ -541,3 +541,38 @@ html, body { max-width: 100%; overflow-x: clip; }
 .oitems.is-hidden { display: none; }
 .rx .rx-size { grid-template-columns: 1fr; margin-left: 70px; gap: 8px; } .rx .rx-size label { justify-content: space-between; } .rx .rx-size select { flex: 1; max-width: 190px; }
 @media (max-width: 640px) { .rx .rx-size { margin-left: 0; } }
+
+/* ───────── Final phone pass: honest controls, comfortable tap targets, readable small text ───────── */
+/* Unselected radios and checkboxes are hollow, selected ones are filled (they used to be drawn as solid dark shapes, which read as "selected") */
+.pl input[type='radio'], .pl input[type='checkbox']:not(.rx-check) { appearance: none; -webkit-appearance: none; flex: none; width: 20px; height: 20px; margin: 0; border: 1.5px solid var(--fg, #090909); background: transparent; display: inline-grid; place-content: center; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.pl input[type='radio'] { border-radius: 50%; } .pl input[type='checkbox']:not(.rx-check) { border-radius: 5px; }
+.pl input[type='radio']:checked { background: radial-gradient(circle at center, var(--fg, #090909) 0 42%, transparent 46%); }
+.pl input[type='checkbox']:not(.rx-check):checked { background: var(--fg, #090909); }
+.pl input[type='checkbox']:not(.rx-check)::after { content: ''; width: 10px; height: 6px; border-left: 2px solid var(--bg, #F2F0EB); border-bottom: 2px solid var(--bg, #F2F0EB); transform: rotate(-45deg) scale(0); margin-top: -2px; transition: transform .15s ease; }
+.pl input[type='checkbox']:not(.rx-check):checked::after { transform: rotate(-45deg) scale(1); }
+.pl input[type='radio']:focus-visible, .pl input[type='checkbox']:focus-visible { outline: 2px solid var(--fg, #090909); outline-offset: 3px; }
+.pl input[type='radio']:disabled, .pl input[type='checkbox']:not(.rx-check):disabled { opacity: .4; cursor: not-allowed; }
+.pl .toggle input[type='checkbox'] { width: 22px; height: 22px; }
+/* the cart-style cards on a white panel keep their own foreground colours */
+.summary input[type='radio'], .summary input[type='checkbox'] { border-color: #090909; }
+
+@media (max-width: 900px) {
+  /* account tabs wrap tidily instead of hiding the last ones off-screen */
+  .dash-nav nav { flex-wrap: wrap; overflow: visible; margin-right: 0; padding-right: 0; gap: 2px 22px; }
+}
+@media (max-width: 640px) {
+  /* announcement and small labels stay readable */
+  .announce { font-size: 10.5px; letter-spacing: .1em; line-height: 1.5; }
+  .badge { font-size: 10.5px; }
+  .ph-cap { font-size: 10px; }
+  /* links that were a thin line of text are easy to tap */
+  .opage-back, .ohelp, .line-name, .co-head a, .ometa a { display: inline-flex; align-items: center; min-height: 44px; }
+  .opage-back { padding-right: 12px; }
+  .linkbtn { min-height: 40px; display: inline-flex; align-items: center; }
+  .crumbs a, .crumbs span { display: inline-flex; align-items: center; min-height: 40px; }
+  /* thumbnails never carry the caption */
+  .line-img .ph-cap, .item-thumb .ph-cap, .co-sum .ph-cap { display: none; }
+  /* wishlist names wrap onto two lines instead of ending in "…" */
+  .wl-title span { white-space: normal; overflow: visible; text-overflow: clip; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .wl-title { flex-direction: column; gap: 2px; }
+}
