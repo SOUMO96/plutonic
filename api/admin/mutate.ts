@@ -102,6 +102,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       }
       // Move the status first (only if nobody changed it meanwhile), then apply side effects once.
       const { data: moved, error: e2 } = await db.from('returns').update({ status: b.status, data: upd.ret }).eq('id', b.id).eq('status', row.status).select('id');
+      // A new status the database does not know yet means migration 007 has not been run.
+      if (e2 && (e2 as { code?: string }).code === '23514') return send(res, 409, { error: 'database_update_needed', message: 'The database does not know the replacement steps yet. Run supabase/migrations/007_exchange_once_replacement_tracking.sql in the Supabase SQL editor, then try again.' });
       if (e2) return dbErr(); if (!moved?.length) return send(res, 409, { error: 'changed', message: 'This request was just updated. Refresh and try again.' });
       if (item && piece) {
         // Exchange: when the replacement is packed, the returned piece goes back on the shelf and the replacement leaves it.
