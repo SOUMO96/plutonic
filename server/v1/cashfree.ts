@@ -4,7 +4,7 @@
  * Untested against the live gateway until sandbox credentials are supplied.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { ApiError } from './lib';
+import { ApiError } from './lib.js';
 
 export const cashfreeConfigured = () => Boolean(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY);
 export const cashfreeMode = () => (process.env.CASHFREE_ENV === 'production' ? 'production' : 'sandbox');

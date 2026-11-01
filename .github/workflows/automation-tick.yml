@@ -1,0 +1,21 @@
+# Keeps the fulfilment automation moving on the free hosting plan (which has no per-minute scheduler of its own).
+# Every 5 minutes it asks the live site to "run whatever is due". Needs two repository secrets:
+#   SITE_URL            e.g. https://your-shop.vercel.app   (no trailing slash)
+#   AUTOMATION_SECRET   the same value as the AUTOMATION_SECRET environment variable on the host
+# GitHub only runs schedules from the default branch (main), so this starts working once this file is on main.
+name: automation-tick
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run what is due
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
+        run: |
+          if [ -z "$SITE_URL" ] || [ -z "$AUTOMATION_SECRET" ]; then echo "SITE_URL / AUTOMATION_SECRET secrets are not set"; exit 0; fi
+          curl --fail --silent --show-error --max-time 40 -X POST "$SITE_URL/api/v1/automation/tick" -H "x-automation-secret: $AUTOMATION_SECRET"

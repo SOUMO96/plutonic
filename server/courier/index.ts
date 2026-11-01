@@ -1,5 +1,5 @@
 import type { Order } from '../../src/site/store';
-import { simulator } from './simulator';
+import { simulator } from './simulator.js';
 
 /**
  * Courier adapter. The automation only knows this interface, so connecting Shadowfax or Blue Dart later

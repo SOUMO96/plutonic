@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { COOKIE_NAME, parseCookies, readConfig, revokeSessions, sameOriginJson, send, sessionCookie, verifySession } from '../_lib/adminAuth';
+import { COOKIE_NAME, parseCookies, readConfig, revokeSessions, sameOriginJson, send, sessionCookie, verifySession } from '../_lib/adminAuth.js';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' }, { Allow: 'POST' });

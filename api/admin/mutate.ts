@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readJson, requireAdmin, sameOriginJson, send } from '../_lib/adminAuth';
-import { adminDb } from '../_lib/supabaseAdmin';
-import { cancelItem, cancelWhole } from '../../src/site/orderCancel';
-import { moveReturn } from '../../server/automation/core';
+import { readJson, requireAdmin, sameOriginJson, send } from '../_lib/adminAuth.js';
+import { adminDb } from '../_lib/supabaseAdmin.js';
+import { cancelItem, cancelWhole } from '../../src/site/orderCancel.js';
+import { moveReturn } from '../../server/automation/core.js';
 
 /**
  * POST /api/admin/mutate  { op, ...payload } — every administrator write.

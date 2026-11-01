@@ -12,10 +12,10 @@
  * as when a person presses the buttons in the admin.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { activeCourier, type Courier, type CourierStatus, type ShipmentKind, type ShipmentRow } from '../courier';
-import { cashfreeConfigured, createRefund } from '../v1/cashfree';
-import { serviceClient } from '../v1/lib';
-import { exchangeToRefund, log, logOnce, moveReturn, readSettings, setOrderStep } from './core';
+import { activeCourier, type Courier, type CourierStatus, type ShipmentKind, type ShipmentRow } from '../courier/index.js';
+import { cashfreeConfigured, createRefund } from '../v1/cashfree.js';
+import { serviceClient } from '../v1/lib.js';
+import { exchangeToRefund, log, logOnce, moveReturn, readSettings, setOrderStep } from './core.js';
 import type { Order, ReturnReq } from '../../src/site/store';
 
 let running = false;
@@ -284,7 +284,7 @@ export async function tick(): Promise<{ actions: number }> {
     db = serviceClient();
     const { data: got, error } = await db.rpc('acquire_lease', { p_name: 'tick', p_seconds: 40 });
     if (!error && got === false) return { actions: 0 };   // another server is already working
-    const stop = Date.now() + 25_000;
+    const stop = Date.now() + (Number(process.env.AUTOMATION_BUDGET_MS) || (process.env.VERCEL ? 15_000 : 25_000));
     let total = 0, n = 0;
     // the switches are read again on every pass, so turning one off takes effect at once, even in the middle of a long run
     do { n = await pass(db, await readSettings(db)); total += n; } while (n > 0 && Date.now() < stop);
