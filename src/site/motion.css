@@ -128,3 +128,28 @@
 .cdlg-foot { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; border-top: 1px solid rgba(9,9,9,.12); padding-top: 14px; }
 .is-cancelled b { text-decoration: line-through; opacity: .55; } .is-cancelled small { opacity: .7; }
 .linkbtn.danger { color: #9B2C1F; }
+
+/* Orders page: expandable orders, return timelines */
+.ocards { display: flex; flex-direction: column; gap: 12px; }
+.ocard { border: 1px solid var(--line2, rgba(9,9,9,.18)); background: var(--bg, transparent); }
+.ocard-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 16px; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.ocard-head > span:first-child { display: flex; flex-direction: column; gap: 2px; }
+.ocard-state { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.ocard-state svg { transition: transform .25s ease; } .ocard.open .ocard-state svg { transform: rotate(180deg); }
+.ocard-body { border-top: 1px solid var(--line2, rgba(9,9,9,.18)); padding: 16px; }
+.ocard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; } @media (max-width: 820px) { .ocard-grid { grid-template-columns: 1fr; } }
+.oitems { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.oitem-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; } .oitem-row span:first-child { display: flex; flex-direction: column; gap: 2px; }
+.status--bad { background: #F4D9D4; color: #7A2217; } .status--info { background: #E3E6EF; color: #26325E; }
+.rtl { margin-top: 10px; padding: 12px; border: 1px solid var(--line2, rgba(9,9,9,.18)); display: flex; flex-direction: column; gap: 8px; }
+.rtl-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.timeline li.rejected .dotc { background: #9B2C1F; color: #fff; }
+.req-form, .req-sent { margin-top: 10px; padding: 14px; border: 1px solid var(--line2, rgba(9,9,9,.18)); display: flex; flex-direction: column; gap: 12px; }
+.req-next { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.refund-box { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+/* Admin returns + refunds */
+.rcard { border: 1px solid rgba(9,9,9,.15); padding: 14px; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; background: #fff; }
+.rcard-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; } .rcard-top > div { display: flex; flex-direction: column; gap: 2px; }
+.rcard-hist { list-style: none; margin: 0; padding: 0; display: flex; gap: 14px; flex-wrap: wrap; }
+.rcard-act { border-top: 1px solid rgba(9,9,9,.12); padding-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.rcard-act label { display: flex; flex-direction: column; gap: 4px; } .rcard-act input, .rcard-act select { height: 40px; border: 1px solid rgba(9,9,9,.3); padding: 0 10px; background: #fff; font: 400 14px Inter, sans-serif; }

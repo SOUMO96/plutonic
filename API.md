@@ -32,7 +32,8 @@ Flutter: `supabase_flutter` → `Supabase.instance.client.auth.signInWithPasswor
 | `GET /orders/track?id=&email=` | – | Guest order lookup (id + email must match) |
 | `GET /orders`, `GET /orders/:id` | yes | The caller's order history / one order (tracking steps are in `step` and `history`) |
 | `POST /orders/:id/cancel` | yes | Cancel before shipping (stock is returned) |
-| `GET /returns`, `POST /returns` | yes | List / request a return or exchange (delivered orders only) |
+| `GET /returns`, `POST /returns` | yes | List / request a return or exchange for ONE item: `{orderId, itemIndex, kind: return\|exchange, reason, note?, exchangeSize?, exchangeColour?}`. Delivered orders within 14 days only; one open request per item; exchanges need a different, in-stock size/colour. Each request carries `status`, `history[]`, `pickupDate`/`pickupSlot` and `adminNote` so an app can show a timeline |
+| `GET /refunds` | yes | The caller's refunds: pending or refunded |
 | `POST /reviews` | yes | Submit a review (held for moderation) |
 | `GET /me`, `PATCH /me` | yes | Profile and preferences |
 | `GET /cart`, `PUT /cart` | yes | Server-side cart shared by all devices (`PUT` replaces it) |

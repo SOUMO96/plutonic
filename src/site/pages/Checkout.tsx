@@ -169,7 +169,7 @@ export function Confirmation({ route }: { route: Route }) {
         <div className="sum-total"><b>{o.payment === 'cod' ? 'Total to pay' : 'Total paid'}</b><b>{inr(o.total)}</b></div>
         <p className="muted small">Shipping to {o.address.name}, {o.address.line1}, {o.address.city} {o.address.pin}, {o.address.state} · {o.payment === 'cod' ? 'Pay on delivery' : 'Payment confirmed'}</p>
       </div>
-      <div className="row-gap"><Link className="btn btn--dark" to={'/tracking/' + o.id}>Track order</Link><Link className="btn btn--ghost" to="/shop">Continue shopping</Link></div>
+      <div className="row-gap"><Link className="btn btn--dark" to={'/account?tab=orders&order=' + o.id}>Track order</Link><Link className="btn btn--ghost" to="/shop">Continue shopping</Link></div>
     </div>
   );
 }

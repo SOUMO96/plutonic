@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CATEGORIES, COLOURS, inr, totalStock, type Gender, type Product } from '../catalog';
 import { Link } from '../router';
-import { ORDER_STEPS, useStore, type Coupon, type Order } from '../store';
+import { ORDER_STEPS, useStore, type Coupon, type Order, type ReturnReq } from '../store';
+import { NEXT_STATUS, PICKUP_SLOTS } from '../returnRules';
 import { isOnline, itemRefund } from '../orderCancel';
 import { LOGO, Photo } from '../ui';
 import { adminSignOut } from './AdminAccess';
 
-const SECTIONS = ['Overview', 'Orders', 'Products', 'Inventory', 'Categories', 'Customers', 'Coupons', 'Banners', 'Returns', 'Reviews', 'Analytics'] as const;
+const SECTIONS = ['Overview', 'Orders', 'Products', 'Inventory', 'Categories', 'Customers', 'Coupons', 'Banners', 'Returns', 'Refunds', 'Reviews', 'Analytics'] as const;
 type Section = (typeof SECTIONS)[number];
 const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
@@ -96,6 +97,96 @@ function Bars({ data, unit = '' }: { data: [string, number][]; unit?: string }) 
 }
 
 
+
+const fmt = (t: number) => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+
+/** One return / exchange request with the actions that make sense for its current step. */
+function ReturnCard({ r }: { r: ReturnReq }) {
+  const s = useStore();
+  const o = s.orders.find((x) => x.id === r.orderId);
+  const [note, setNote] = useState('');
+  const [date, setDate] = useState(todayISO());
+  const [slot, setSlot] = useState<string>(PICKUP_SLOTS[0]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const go_ = async (status: ReturnReq['status']) => {
+    setBusy(true); setMsg('');
+    const res = await s.updateReturn(r.id, status, { note, pickupDate: date, pickupSlot: slot });
+    setBusy(false);
+    if (!res.ok) setMsg(res.message); else setNote('');
+  };
+  const next = NEXT_STATUS[r.status];
+  return (
+    <div className="rcard">
+      <div className="rcard-top">
+        <div><b>{r.kind === 'exchange' ? 'Exchange' : 'Return'} {r.id} · {r.productName}</b><span className="muted small">{r.variant}{r.qty ? ` · Qty ${r.qty}` : ''} · order #{r.orderId}{o ? ` · ${o.address.name}, ${o.address.city}` : ''}</span></div>
+        <span className={'status' + (r.status === 'Rejected' ? ' status--bad' : r.status === 'Requested' ? ' status--info' : '')}>{r.status}</span>
+      </div>
+      <p className="small">Reason: <b>{r.reason}</b>{r.note ? ` · “${r.note}”` : ''}</p>
+      {r.kind === 'exchange' && r.exchangeTo && <p className="small">Customer wants: <b>{r.exchangeTo.colourName} · {r.exchangeTo.size}</b> instead of {r.variant}</p>}
+      {r.kind === 'return' && <p className="small">Refund when completed: <b>{inr(r.refundAmount ?? 0)}</b>{o?.payment === 'cod' ? ' · cash on delivery: ask for UPI/bank details' : ''}</p>}
+      {r.pickupDate && <p className="small">Pickup: <b>{new Date(r.pickupDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}, {r.pickupSlot}</b></p>}
+      <ol className="rcard-hist">{(r.history ?? []).map((h, i) => <li key={i}><b>{h.status}</b> <span className="muted small">{fmt(h.at)}</span></li>)}</ol>
+      {next.length > 0 && (
+        <div className="rcard-act">
+          {next.includes('Pickup scheduled') && <div className="row-gap"><label className="small">Pickup date<input type="date" value={date} min={todayISO()} onChange={(e) => setDate(e.target.value)} /></label><label className="small">Time slot<select value={slot} onChange={(e) => setSlot(e.target.value)}>{PICKUP_SLOTS.map((x) => <option key={x}>{x}</option>)}</select></label></div>}
+          <label className="small">Message to the customer {next.includes('Rejected') ? '(required to reject)' : '(optional)'}<input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Shown on their order" /></label>
+          <div className="row-gap">
+            {next.includes('Approved') && <button type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => go_('Approved')}>Approve</button>}
+            {next.includes('Pickup scheduled') && <button type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => go_('Pickup scheduled')}>Schedule pickup</button>}
+            {next.includes('Picked up') && <button type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => go_('Picked up')}>Mark picked up</button>}
+            {next.includes('Completed') && <button type="button" className="btn btn--dark btn--sm" disabled={busy} onClick={() => window.confirm(r.kind === 'return' ? `Item received. This puts it back in stock and records a refund of ${inr(r.refundAmount ?? 0)}. Continue?` : 'Replacement is being sent. This swaps the stock (returned size back in, replacement out). Continue?') && go_('Completed')}>{r.kind === 'return' ? 'Complete · record refund' : 'Complete · send replacement'}</button>}
+            {next.includes('Rejected') && <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => go_('Rejected')}>Reject</button>}
+          </div>
+          {msg && <p className="err small" role="alert">{msg}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReturnsPanel() {
+  const s = useStore();
+  const [f, setF] = useState<'open' | 'all' | 'done'>('open');
+  const list = [...s.returns].sort((a, b) => b.createdAt - a.createdAt).filter((r) => (f === 'all' ? true : f === 'open' ? r.status !== 'Completed' && r.status !== 'Rejected' : r.status === 'Completed' || r.status === 'Rejected'));
+  return (
+    <section className="panel">
+      <div className="seg" role="tablist" aria-label="Show">{([['open', 'Needs action'], ['done', 'Finished'], ['all', 'All']] as const).map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={f === k} onClick={() => setF(k)}>{l}</button>)}</div>
+      {list.length === 0 && <p className="muted">Nothing here.</p>}
+      {list.map((r) => <ReturnCard key={r.id} r={r} />)}
+      <p className="muted small">Flow: Requested, Approved, Pickup scheduled, Picked up, Completed. Customers see each step, the pickup date and your message on their order. Completing a return puts the item back in stock and adds a line to <b>Refunds</b>; completing an exchange swaps the stock.</p>
+    </section>
+  );
+}
+
+/** Everything owed back to customers (cancellations and completed returns) and whether it has been paid out. */
+function RefundsPanel() {
+  const s = useStore();
+  const [f, setF] = useState<'Pending' | 'Refunded' | 'all'>('Pending');
+  const [refs, setRefs] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const list = [...s.refunds].sort((a, b) => b.createdAt - a.createdAt).filter((x) => f === 'all' || x.status === f);
+  const pending = s.refunds.filter((x) => x.status === 'Pending');
+  const owed = pending.reduce((n, x) => n + x.amount, 0);
+  const paid = s.refunds.filter((x) => x.status === 'Refunded').reduce((n, x) => n + x.amount, 0);
+  return (
+    <section className="panel">
+      <div className="kpis"><div><span className="lbl muted">Still to refund</span><b>{inr(owed)}</b></div><div><span className="lbl muted">Pending</span><b>{pending.length}</b></div><div><span className="lbl muted">Refunded so far</span><b>{inr(paid)}</b></div></div>
+      <div className="seg" role="tablist" aria-label="Show">{([['Pending', 'To refund'], ['Refunded', 'Refunded'], ['all', 'All']] as const).map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={f === k} onClick={() => setF(k)}>{l}</button>)}</div>
+      {list.length === 0 && <p className="muted">No refunds here.</p>}
+      {list.length > 0 && <div className="table-wrap"><table className="tbl tbl--rows"><thead><tr><th>Date</th><th>Order</th><th>Why</th><th>Amount</th><th>Status</th><th /></tr></thead><tbody>
+        {list.map((x) => { const key = String(x.id); const o = s.orders.find((y) => y.id === x.orderId); return (
+          <tr key={key}><td>{fmt(x.createdAt)}</td><td><b>#{x.orderId}</b>{o && <small className="muted"> {o.address.name}</small>}</td>
+            <td>{x.source === 'cancellation' ? 'Cancelled order or item' : 'Returned item'}{x.note && <small className="muted"> · {x.note}</small>}</td>
+            <td>{inr(x.amount)}</td><td>{x.status}{x.status === 'Refunded' && <small className="muted"> {x.processedAt ? fmt(x.processedAt) : ''}{x.reference ? ' · ref ' + x.reference : ''}</small>}</td>
+            <td>{x.status === 'Pending' && <span className="row-gap"><input aria-label="Payment reference" placeholder="UTR / reference" value={refs[key] ?? ''} maxLength={80} onChange={(e) => setRefs({ ...refs, [key]: e.target.value })} /><button type="button" className="btn btn--dark btn--sm" disabled={busy === key} onClick={async () => { if (!window.confirm(`Mark ${inr(x.amount)} for order #${x.orderId} as refunded? Do this after the money has actually been sent.`)) return; setBusy(key); await s.markRefunded(x.id, refs[key] ?? ''); setBusy(null); }}>Mark refunded</button></span>}</td></tr>); })}
+      </tbody></table></div>}
+      <p className="muted small">This page is the record of what you owe customers. Send the money from Cashfree or your bank, then press <b>Mark refunded</b> and add the payment reference. Online orders are refunded to the original payment method; for cash-on-delivery returns, ask the customer for UPI or bank details first.</p>
+    </section>
+  );
+}
+
 const CANCEL_REASONS = ['Item out of stock or damaged', 'Customer asked to cancel', 'Payment problem', 'Address or delivery problem', 'Other'];
 
 /** Cancel a whole order, or one item of it. Stock goes back on the shelf; refunds due are recorded on the order. */
@@ -138,6 +229,13 @@ export default function Admin() {
   const s = useStore();
   const { enterAdmin, leaveAdmin } = s;
   useEffect(() => { void enterAdmin(); return () => leaveAdmin(); }, [enterAdmin, leaveAdmin]);
+  // New customer activity (orders, return requests) shows up without reloading the page.
+  const { refreshAdmin } = s;
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) void refreshAdmin(); };
+    const t = window.setInterval(tick, 20_000); document.addEventListener('visibilitychange', tick);
+    return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', tick); };
+  }, [refreshAdmin]);
   const [sec, setSec] = useState<Section>('Overview');
   const [cancelFor, setCancelFor] = useState<string | null>(null);
   const [edit, setEdit] = useState<Product | null>(null);
@@ -156,14 +254,14 @@ export default function Admin() {
     <div className="admin">
       <aside className="admin-side" aria-label="Admin">
         <Link to="/" className="admin-brand"><img src={LOGO} alt="PLUTONIC" height={40} /><span className="lbl">Admin</span></Link>
-        <nav>{SECTIONS.map((x) => <button key={x} type="button" aria-current={sec === x ? 'page' : undefined} onClick={() => setSec(x)}>{x}{x === 'Returns' && pendingReturns > 0 && <i>{pendingReturns}</i>}{x === 'Reviews' && pendingReviews > 0 && <i>{pendingReviews}</i>}</button>)}</nav>
+        <nav>{SECTIONS.map((x) => <button key={x} type="button" aria-current={sec === x ? 'page' : undefined} onClick={() => setSec(x)}>{x}{x === 'Returns' && pendingReturns > 0 && <i>{pendingReturns}</i>}{x === 'Refunds' && s.refunds.filter((y) => y.status === 'Pending').length > 0 && <i>{s.refunds.filter((y) => y.status === 'Pending').length}</i>}{x === 'Reviews' && pendingReviews > 0 && <i>{pendingReviews}</i>}</button>)}</nav>
         <Link to="/" className="lbl ulink small">← Back to store</Link>
         <button type="button" className="lbl ulink small admin-signout" onClick={() => { void adminSignOut(); }}>Sign out</button>
       </aside>
       <main className="admin-main">
         {s.adminStatus === 'loading' && <p className="note" role="status">Loading data from the database…</p>}
         {s.adminStatus === 'error' && <p className="note err" role="alert">The database could not be reached or is not configured on the server (SUPABASE_SERVICE_ROLE_KEY). Nothing here can be saved until that is fixed.</p>}
-        <div className="admin-top"><div><h1 className="h2">{sec}</h1><span className="muted small">Access is verified by the server. Catalogue, orders and edits are demonstration data stored in this browser only.</span></div>{sec === 'Products' && <button className="btn btn--dark" type="button" onClick={() => setEdit(blank('men'))}>Add product</button>}</div>
+        <div className="admin-top"><div><h1 className="h2">{sec}</h1><span className="muted small">Access is verified by the server. Catalogue, orders and edits are demonstration data stored in this browser only.</span></div><button className="linkbtn" type="button" onClick={() => { void refreshAdmin(); s.say('Refreshed'); }}>Refresh</button>{sec === 'Products' && <button className="btn btn--dark" type="button" onClick={() => setEdit(blank('men'))}>Add product</button>}</div>
 
         {sec === 'Overview' && <>
           <details className="panel guide" open>
@@ -211,7 +309,8 @@ export default function Admin() {
 
         {sec === 'Banners' && <section className="panel"><div className="order-row"><div><b>Home hero · The Quiet Hours</b><span className="muted small">Live · uses /images/banners/men-campaign-studio.webp and women-campaign-milan.webp</span></div></div><div className="order-row"><div><b>Announcement bar</b><span className="muted small">Delivery threshold and exchange window, from the catalogue constants</span></div></div><p className="muted small">Banner editing is read-only in this preview. Replace the files in public/images/banners/ to change the campaign imagery.</p></section>}
 
-        {sec === 'Returns' && <section className="panel">{s.returns.length === 0 && <p className="muted">No requests yet. Create one from Returns &amp; exchanges on the storefront.</p>}{s.returns.map((r) => <div key={r.id} className="order-row"><div><b>{r.kind === 'exchange' ? 'Exchange' : 'Return'} · {r.productName}</b><span className="muted small">{r.variant} · {r.reason} · #{r.orderId} · {r.status}</span></div><div className="row-gap">{r.status === 'Requested' && <><button className="btn btn--dark btn--sm" type="button" onClick={() => s.setReturnStatus(r.id, 'Approved')}>Approve</button><button className="btn btn--ghost btn--sm" type="button" onClick={() => s.setReturnStatus(r.id, 'Rejected')}>Reject</button></>}{r.status === 'Approved' && <button className="btn btn--ghost btn--sm" type="button" onClick={() => s.setReturnStatus(r.id, 'Pickup scheduled')}>Schedule pickup</button>}{r.status === 'Pickup scheduled' && <button className="btn btn--ghost btn--sm" type="button" onClick={() => s.setReturnStatus(r.id, 'Completed')}>Mark complete</button>}</div></div>)}</section>}
+        {sec === 'Returns' && <ReturnsPanel />}
+        {sec === 'Refunds' && <RefundsPanel />}
 
         {sec === 'Reviews' && <section className="panel">{s.reviews.length === 0 && <p className="muted">No customer reviews to moderate yet.</p>}{s.reviews.map((r) => <div key={r.id} className="order-row"><div><b>{s.product(r.productId)?.name} · {'★'.repeat(r.rating)}</b><span className="muted small">{r.name} · {r.status} — {r.text}</span></div><div className="row-gap"><button className="btn btn--dark btn--sm" type="button" onClick={() => s.setReviewStatus(r.id, 'Published')}>Publish</button><button className="btn btn--ghost btn--sm" type="button" onClick={() => s.setReviewStatus(r.id, 'Hidden')}>Hide</button></div></div>)}</section>}
 
@@ -225,7 +324,7 @@ export default function Admin() {
   function OrdersTable({ limit }: { limit?: number }) {
     return (
       <div className="table-wrap"><table className="tbl tbl--rows"><thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th /></tr></thead><tbody>
-        {s.orders.slice(0, limit ?? 999).map((o) => <tr key={o.id}><td><Link to={'/tracking/' + o.id} className="ulink">#{o.id}</Link></td><td>{o.address.name}</td><td>{o.items.reduce((n, i) => n + i.qty, 0)}</td><td>{inr(o.total)}</td><td>{o.step < 0 ? 'Cancelled' : ORDER_STEPS[o.step]}{o.step >= 0 && o.items.some((i) => i.cancelled) ? <small className="muted"> · {o.items.filter((i) => i.cancelled).length} item(s) cancelled</small> : null}{o.refundDue ? <small className="warn"> · refund due {inr(o.refundDue)}</small> : null}</td>
+        {s.orders.slice(0, limit ?? 999).map((o) => <tr key={o.id}><td><b>#{o.id}</b></td><td>{o.address.name}</td><td>{o.items.reduce((n, i) => n + i.qty, 0)}</td><td>{inr(o.total)}</td><td>{o.step < 0 ? 'Cancelled' : ORDER_STEPS[o.step]}{o.step >= 0 && o.items.some((i) => i.cancelled) ? <small className="muted"> · {o.items.filter((i) => i.cancelled).length} item(s) cancelled</small> : null}{o.refundDue ? <small className="warn"> · refund due {inr(o.refundDue)}</small> : null}</td>
           <td className="row-gap">{o.step >= 0 && o.step < 4 && <button className="linkbtn" type="button" onClick={() => s.advanceOrder(o.id)}>Mark {ORDER_STEPS[o.step + 1].toLowerCase()}</button>}{o.step >= 0 && o.step < 4 && <button className="linkbtn danger" type="button" onClick={() => setCancelFor(o.id)}>Cancel…</button>}</td></tr>)}</tbody></table></div>
     );
   }

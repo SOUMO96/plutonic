@@ -67,8 +67,9 @@ add('POST', '/orders/:id/cancel', 'required', async ({ db, params }) => must(awa
 add('GET', '/returns', 'required', async ({ db }) => ({ items: must(await db.from('returns').select('data').order('created_at', { ascending: false }).limit(200)).map((r: any) => r.data) }));
 add('POST', '/returns', 'required', async ({ db, body }) => {
   const b = await body();
-  return created(must(await db.rpc('create_return', { p: { orderId: b.orderId, productName: b.productName, variant: b.variant, kind: b.kind, reason: b.reason, note: b.note } })));
+  return created(must(await db.rpc('create_return', { p: { orderId: b.orderId, itemIndex: b.itemIndex, kind: b.kind, reason: b.reason, note: b.note, exchangeSize: b.exchangeSize, exchangeColour: b.exchangeColour } })));
 }, { bucket: 'write', max: 20 });
+add('GET', '/refunds', 'required', async ({ db }) => ({ items: must(await db.from('refunds').select('id, order_id, return_id, source, amount, status, reference, created_at, processed_at').order('created_at', { ascending: false }).limit(200)) }));
 add('POST', '/reviews', 'required', async (c) => {
   const b = await c.body(); const u = await c.user();
   if (!UUIDISH.test(String(b.productId ?? '')) || !str(b.name, 80) || !str(b.text, 2000, 10) || !Number.isInteger(b.rating) || (b.rating as number) < 1 || (b.rating as number) > 5) throw new ApiError(400, 'invalid', 'Check the review fields.');

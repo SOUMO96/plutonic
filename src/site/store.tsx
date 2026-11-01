@@ -4,6 +4,7 @@ import {
   type Product,
 } from './catalog';
 import { cancelItem as cancelItemRule, cancelWhole as cancelWholeRule, type Cancelled } from './orderCancel';
+import { applyUpdate, requestError, type Update } from './returnRules';
 import { isLive, supabase } from './supabase';
 
 /**
@@ -32,13 +33,25 @@ export type Order = {
   /** Set when an order or item is cancelled by an administrator. `refundDue` is the amount owed back (online orders only). */
   cancelReason?: string; cancelledBy?: 'admin' | 'customer'; refundDue?: number;
 };
-export type ReturnReq = { id: string; orderId: string; productName: string; variant: string; kind: 'exchange' | 'return'; reason: string; note: string; status: 'Requested' | 'Approved' | 'Pickup scheduled' | 'Completed' | 'Rejected'; createdAt: number };
+export type ReturnReq = {
+  id: string; orderId: string; productName: string; variant: string; kind: 'exchange' | 'return'; reason: string; note: string;
+  status: 'Requested' | 'Approved' | 'Pickup scheduled' | 'Picked up' | 'Completed' | 'Rejected'; createdAt: number;
+  /** Which line of the order this covers (one open request per line). */
+  itemIndex?: number; productId?: string; qty?: number;
+  /** Exchanges: the size/colour the customer wants instead. */
+  exchangeTo?: { colourId: string; colourName: string; size: string };
+  /** Returns: what is owed back once the item is received. */
+  refundAmount?: number;
+  pickupDate?: string; pickupSlot?: string; adminNote?: string;
+  history?: { status: ReturnReq['status']; at: number }[];
+};
+export type Refund = { id: number | string; orderId: string; returnId?: string; source: 'cancellation' | 'return'; amount: number; status: 'Pending' | 'Refunded'; note?: string; reference?: string; createdAt: number; processedAt?: number };
 export type Review = { id: string; productId: string; name: string; rating: number; text: string; size: string; fit: string; status: 'Published' | 'Pending' | 'Hidden'; createdAt: number };
 export type Coupon = { code: string; kind: 'percent' | 'flat'; value: number; minSubtotal: number; active: boolean; label: string };
 
 type Persisted = {
   cart: CartLine[]; wishlist: string[]; couponCode: string; user: User | null; addresses: Address[];
-  orders: Order[]; returns: ReturnReq[]; reviews: Review[]; coupons: Coupon[];
+  orders: Order[]; returns: ReturnReq[]; refunds: Refund[]; reviews: Review[]; coupons: Coupon[];
   edits: Record<string, Product>; extra: Product[]; removed: string[];
   notify: string[]; whatsapp: boolean; newsletter: boolean;
 };
@@ -76,17 +89,19 @@ function mkSeed(id: string, createdAt: number, step: number, lines: [string, str
 /** In live mode the database is the source of truth: drop any browser-demo records. */
 const GUEST_KEY = 'plutonic-guest-orders';
 function guestOrders(): Order[] { try { return JSON.parse(window.sessionStorage.getItem(GUEST_KEY) ?? '[]') as Order[]; } catch { return []; } }
-const liveReset = (p: Persisted): Persisted => ({ ...p, orders: guestOrders(), returns: [], reviews: [], coupons: [], user: null, addresses: [], edits: {}, extra: [], removed: [] });
+const liveReset = (p: Persisted): Persisted => ({ ...p, orders: guestOrders(), returns: [], refunds: [], reviews: [], coupons: [], user: null, addresses: [], edits: {}, extra: [], removed: [] });
 type ReviewRow = { id: string; product_id: string; name: string; rating: number; body: string; size: string; fit: string; status: Review['status']; created_at: string };
 const rowToReview = (r: ReviewRow): Review =>
   ({ id: r.id, productId: r.product_id, name: r.name, rating: r.rating, text: r.body, size: r.size, fit: r.fit, status: r.status, createdAt: Date.parse(r.created_at) });
 /** supabase-js builders are lazy: nothing is sent until they are awaited, so fire-and-forget writes go through here. */
 const run = (q: PromiseLike<unknown>) => { void Promise.resolve(q).catch(() => undefined); };
+type RefundRow = { id: number; order_id: string; return_id: string | null; source: Refund['source']; amount: number; status: Refund['status']; note: string | null; reference: string | null; created_at: string; processed_at: string | null };
+const rowToRefund = (x: RefundRow): Refund => ({ id: x.id, orderId: x.order_id, returnId: x.return_id ?? undefined, source: x.source, amount: x.amount, status: x.status, note: x.note ?? undefined, reference: x.reference ?? undefined, createdAt: Date.parse(x.created_at), processedAt: x.processed_at ? Date.parse(x.processed_at) : undefined });
 const REVIEW_COLS = 'id, product_id, name, rating, body, size, fit, status, created_at';
 
 function initial(): Persisted {
   const empty: Persisted = {
-    cart: [], wishlist: [], couponCode: '', user: null, addresses: [], orders: seedOrders(Date.now()), returns: [], reviews: [],
+    cart: [], wishlist: [], couponCode: '', user: null, addresses: [], orders: seedOrders(Date.now()), returns: [], refunds: [], reviews: [],
     coupons: seedCoupons, edits: {}, extra: [], removed: [], notify: [], whatsapp: true, newsletter: false,
   };
   try {
@@ -101,7 +116,8 @@ function initial(): Persisted {
 
 type Result = { ok: boolean; message: string };
 export type AdminStatus = 'idle' | 'loading' | 'ready' | 'error';
-type AdminData = { products: Product[]; orders: Order[]; returns: ReturnReq[]; reviews: Review[]; coupons: Coupon[] };
+type AdminData = { products: Product[]; orders: Order[]; returns: ReturnReq[]; refunds: Refund[]; reviews: Review[]; coupons: Coupon[] };
+export type NewReturn = { orderId: string; itemIndex: number; kind: 'exchange' | 'return'; reason: string; note: string; exchangeSize?: string; exchangeColour?: string };
 export type Auth = {
   signUp: (p: { email: string; password: string; firstName: string; lastName: string; mobile: string; fit?: string }) => Promise<Result & { needsConfirm?: boolean }>;
   signIn: (email: string, password: string) => Promise<Result & { needsConfirm?: boolean }>;
@@ -128,7 +144,12 @@ export type Store = {
   price: (delivery?: 'standard' | 'express', payment?: Order['payment']) => PriceBreakdown;
   placeOrder: (d: { delivery: Order['delivery']; payment: Order['payment']; address: Address; email: string; mobile: string }) => Promise<Order | { error: string }>;
   orders: Order[]; advanceOrder: (id: string) => void; cancelOrder: (id: string) => void;
-  returns: ReturnReq[]; createReturn: (r: Omit<ReturnReq, 'id' | 'createdAt' | 'status'>) => void; setReturnStatus: (id: string, s: ReturnReq['status']) => void;
+  returns: ReturnReq[]; refunds: Refund[];
+  /** Customer: ask to return or exchange one item. Resolves with an error message if the rules refuse it. */
+  createReturn: (r: NewReturn) => Promise<{ ok: boolean; message: string; request?: ReturnReq }>;
+  /** Administrator: move a request along (approve, schedule pickup, picked up, complete, reject). */
+  updateReturn: (id: string, status: ReturnReq['status'], u?: Update) => Promise<{ ok: boolean; message: string }>;
+  markRefunded: (id: number | string, reference: string) => Promise<boolean>;
   reviews: Review[]; addReview: (r: Omit<Review, 'id' | 'createdAt' | 'status'>) => void; setReviewStatus: (id: string, s: Review['status']) => void;
   user: User | null; signIn: (u: Omit<User, 'since'>) => void; signOut: () => void; updateUser: (u: Partial<User>) => void;
   addresses: Address[]; saveAddress: (a: Omit<Address, 'id'> & { id?: string }) => void; removeAddress: (id: string) => void;
@@ -140,6 +161,8 @@ export type Store = {
   /** True when connected to the Supabase database (otherwise the browser-only demo store). */
   live: boolean; authReady: boolean; auth: Auth; lookupOrder: (id: string, email: string) => Promise<Order | null>;
   adminStatus: AdminStatus; enterAdmin: () => Promise<void>; leaveAdmin: () => void;
+  /** Re-read orders, returns, refunds etc. from the server (new customer activity). */
+  refreshAdmin: () => Promise<void>;
   /** Administrator: cancel a whole order, or one item of it (stock is returned). */
   adminCancelOrder: (id: string, reason: string) => Promise<boolean>;
   adminCancelItem: (id: string, index: number, reason: string) => Promise<boolean>;
@@ -160,7 +183,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       // Live mode: never keep accounts, orders or addresses in browser storage.
-      const keep = isLive ? { ...state, orders: [], returns: [], reviews: [], user: null, addresses: [], coupons: [], edits: {}, extra: [], removed: [] } : state;
+      const keep = isLive ? { ...state, orders: [], returns: [], refunds: [], reviews: [], user: null, addresses: [], coupons: [], edits: {}, extra: [], removed: [] } : state;
       window.localStorage.setItem(KEY, JSON.stringify(keep));
     } catch { /* storage unavailable */ }
   }, [state]);
@@ -190,13 +213,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     const hydrate = async (u: { id: string; email?: string | null; created_at?: string }) => {
       uid.current = u.id;
-      const [prof, addr, wish, ord, ret, rev] = await Promise.all([
+      const [prof, addr, wish, ord, ret, rev, ref] = await Promise.all([
         db.from('profiles').select('*').eq('id', u.id).maybeSingle(),
         db.from('addresses').select('id, data').order('created_at'),
         db.from('wishlist').select('product_id'),
         db.from('orders').select('data').order('created_at', { ascending: false }),
         db.from('returns').select('data').order('created_at', { ascending: false }),
         db.from('reviews').select(REVIEW_COLS).order('created_at', { ascending: false }),
+        db.from('refunds').select('*').order('created_at', { ascending: false }),
       ]);
       const p = prof.data;
       setState((s) => {
@@ -208,7 +232,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const guest = s.orders.filter((o) => !mine.some((m) => m.id === o.id));
         return {
           ...s, wishlist: merged, addresses: (addr.data ?? []).map((r) => ({ ...(r.data as Address), id: r.id as string })),
-          orders: [...mine, ...guest], returns: (ret.data ?? []).map((r) => r.data as ReturnReq),
+          orders: [...mine, ...guest], returns: (ret.data ?? []).map((r) => r.data as ReturnReq), refunds: ((ref.data ?? []) as RefundRow[]).map(rowToRefund),
           reviews: ((rev.data ?? []) as ReviewRow[]).map(rowToReview),
           whatsapp: p?.whatsapp ?? s.whatsapp, newsletter: p?.newsletter ?? s.newsletter,
           user: { firstName: p?.first_name ?? '', lastName: p?.last_name ?? '', email: u.email ?? '', mobile: p?.mobile ?? '', fit: p?.fit ?? undefined, since: Date.parse(u.created_at ?? '') || Date.now() },
@@ -221,7 +245,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // Defer: calling supabase from inside this callback can deadlock the auth lock.
       window.setTimeout(() => {
         if (session) void hydrate(session.user);
-        else { uid.current = null; setState((s) => ({ ...s, user: null, addresses: [], orders: guestOrders(), returns: [] })); }
+        else { uid.current = null; setState((s) => ({ ...s, user: null, addresses: [], orders: guestOrders(), returns: [], refunds: [] })); }
       }, 0);
     });
     return () => sub.subscription.unsubscribe();
@@ -382,16 +406,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     advanceLocal(id);
   };
   const advanceLocal = (id: string) => setState((s) => ({ ...s, orders: s.orders.map((o) => (o.id === id && o.step >= 0 && o.step < ORDER_STEPS.length - 1 ? { ...o, step: o.step + 1, history: [...o.history, Date.now()] } : o)) }));
+  const reloadRefunds = async () => {
+    if (!supabase || !uid.current) return;
+    const { data } = await supabase.from('refunds').select('*').order('created_at', { ascending: false });
+    if (data) setState((st) => ({ ...st, refunds: (data as RefundRow[]).map(rowToRefund) }));
+  };
   const cancelOrder = (id: string) => {
     if (isLive && supabase) {
       void supabase.rpc('cancel_order', { p_id: id }).then(({ data, error }) => {
         if (error) { say(error.message); return; }
         setState((s) => ({ ...s, orders: s.orders.map((o) => (o.id === id ? (data as Order) : o)) }));
+        say('Order cancelled'); void reloadRefunds();
       });
       return;
     }
-    setState((s) => ({ ...s, orders: s.orders.map((o) => (o.id === id && o.step >= 0 && o.step < 3 ? { ...o, step: -1 } : o)) }));
+    const cur = state.orders.find((o) => o.id === id);
+    const result = cur && cur.step < 3 ? cancelWholeRule(cur, 'Cancelled by customer', 'customer') : null;
+    if (!cur || !result) { say('This order can no longer be cancelled.'); return; }
+    localCancel(cur, result, 'Cancelled by customer'); say('Order cancelled');
   };
+  /** Browser demo only: store a cancellation result, return its stock and record the refund owed. */
+  const localCancel = (before: Order, result: Cancelled, note: string) => setState((s) => {
+    const edits = { ...s.edits };
+    for (const p of allProducts) { const np = restocked(edits[p.id] ?? p, result); if (np !== (edits[p.id] ?? p)) edits[p.id] = np; }
+    const owed = (result.order.refundDue ?? 0) - (before.refundDue ?? 0);
+    const refunds = owed > 0 ? [{ id: 'RF-' + (s.refunds.length + 1), orderId: before.id, source: 'cancellation' as const, amount: owed, status: 'Pending' as const, note, createdAt: Date.now() }, ...s.refunds] : s.refunds;
+    return { ...s, edits, refunds, orders: s.orders.map((o) => (o.id === before.id ? result.order : o)) };
+  });
   const lookupOrder: Store['lookupOrder'] = async (id, email) => {
     if (!supabase) return null;
     const { data } = await supabase.rpc('track_order', { p_id: id, p_email: email });
@@ -400,21 +441,71 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return o;
   };
 
-  const createReturn: Store['createReturn'] = (r) => {
+  const createReturn: Store['createReturn'] = async (r) => {
     if (isLive && supabase) {
-      void supabase.rpc('create_return', { p: r }).then(({ data, error }) => {
-        if (error) { say(error.message); return; }
-        setState((s) => ({ ...s, returns: [data as ReturnReq, ...s.returns] }));
-        say(r.kind === 'exchange' ? 'Exchange requested' : 'Return requested');
-      });
-      return;
+      const { data, error } = await supabase.rpc('create_return', { p: r });
+      if (error) return { ok: false, message: error.message };
+      setState((s) => ({ ...s, returns: [data as ReturnReq, ...s.returns] }));
+      return { ok: true, message: 'Request sent', request: data as ReturnReq };
     }
-    setState((s) => ({ ...s, returns: [{ ...r, id: 'R-' + (1000 + s.returns.length + 1), createdAt: Date.now(), status: 'Requested' }, ...s.returns] })); say(r.kind === 'exchange' ? 'Exchange requested' : 'Return requested'); };
-  const setReturnStatus = (id: string, status: ReturnReq['status']) => {
-    if (adminData) { void adminCall('return.setStatus', { id, status }).then((ok) => ok && patchAdmin((d) => ({ ...d, returns: d.returns.map((r) => (r.id === id ? { ...r, status } : r)) }))); return; }
-    setReturnLocal(id, status);
+    // Browser demo: same rules as the database function
+    const o = state.orders.find((x) => x.id === r.orderId);
+    if (!o) return { ok: false, message: 'Order not found.' };
+    const bad = requestError(o, r.itemIndex, state.returns);
+    if (bad) return { ok: false, message: bad };
+    if (r.reason.trim().length < 2) return { ok: false, message: 'Choose a reason.' };
+    const it = o.items[r.itemIndex]; let exchangeTo: ReturnReq['exchangeTo'];
+    if (r.kind === 'exchange') {
+      const p = allProducts.find((x) => x.id === it.productId); const colourId = r.exchangeColour || it.colourId;
+      if (!r.exchangeSize) return { ok: false, message: 'Choose the size you want instead.' };
+      if (r.exchangeSize === it.size && colourId === it.colourId) return { ok: false, message: 'Choose a different size or colour to exchange to.' };
+      if (!p || sizeStock(p, colourId, r.exchangeSize) < it.qty) return { ok: false, message: `Size ${r.exchangeSize} in that colour is not in stock right now. Choose another, or request a return.` };
+      exchangeTo = { colourId, colourName: p.colours.find((c) => c.id === colourId)?.name ?? colourId, size: r.exchangeSize };
+    }
+    const line = it.price * it.qty; const share = o.subtotal > 0 ? Math.round((o.discount * line) / o.subtotal) : 0; const now = Date.now();
+    const request: ReturnReq = { id: 'R-' + (1001 + state.returns.length), orderId: o.id, itemIndex: r.itemIndex, productId: it.productId, productName: it.name, variant: `${it.colourName} · ${it.size}`, qty: it.qty, kind: r.kind, reason: r.reason, note: r.note, exchangeTo, refundAmount: r.kind === 'return' ? line - share : 0, status: 'Requested', createdAt: now, history: [{ status: 'Requested', at: now }] };
+    setState((s) => ({ ...s, returns: [request, ...s.returns] }));
+    return { ok: true, message: 'Request sent', request };
   };
-  const setReturnLocal = (id: string, status: ReturnReq['status']) => setState((s) => ({ ...s, returns: s.returns.map((r) => (r.id === id ? { ...r, status } : r)) }));
+  const refreshAdmin = useCallback(async () => {
+    try { const r = await fetch('/api/admin/data', { credentials: 'same-origin', cache: 'no-store' }); if (r.ok) setAdminData((await r.json()) as AdminData); } catch { /* keep what we have */ }
+  }, []);
+  const updateReturn: Store['updateReturn'] = async (id, status, u = {}) => {
+    if (adminData) {
+      try {
+        const r = await fetch('/api/admin/mutate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'return.update', id, status, ...u }) });
+        const d = (await r.json().catch(() => ({}))) as { message?: string };
+        if (!r.ok) { const m = r.status === 401 ? 'Your admin session has expired. Please sign in again.' : d.message ?? 'That change could not be saved.'; say(m); return { ok: false, message: m }; }
+        await refreshAdmin(); return { ok: true, message: 'Updated' };
+      } catch { say('Could not reach the server.'); return { ok: false, message: 'Could not reach the server.' }; }
+    }
+    const cur = state.returns.find((x) => x.id === id);
+    if (!cur) return { ok: false, message: 'Request not found.' };
+    const upd = applyUpdate(cur, status, u);
+    if ('error' in upd) { say(upd.error); return { ok: false, message: upd.error }; }
+    const o = state.orders.find((x) => x.id === cur.orderId); const item = o?.items[cur.itemIndex ?? -1];
+    if (status === 'Approved' && cur.kind === 'exchange' && cur.exchangeTo && item) {
+      const p = allProducts.find((x) => x.id === item.productId);
+      if (!p || sizeStock(p, cur.exchangeTo.colourId, cur.exchangeTo.size) < item.qty) { const m = `Size ${cur.exchangeTo.size} is out of stock, so this exchange cannot be approved.`; say(m); return { ok: false, message: m }; }
+    }
+    setState((s) => {
+      let edits = s.edits; let refunds = s.refunds;
+      if (status === 'Completed' && item) {
+        edits = { ...s.edits };
+        const bump = (colourId: string, size: string, d: number) => { const p = edits[item.productId] ?? allProducts.find((x) => x.id === item.productId); if (p) edits[item.productId] = { ...p, stock: { ...p.stock, [`${colourId}:${size}`]: Math.max(0, (p.stock[`${colourId}:${size}`] ?? 0) + d) } }; };
+        bump(item.colourId, item.size, item.qty);
+        if (cur.kind === 'exchange' && cur.exchangeTo) bump(cur.exchangeTo.colourId, cur.exchangeTo.size, -item.qty);
+        if (cur.kind === 'return' && (cur.refundAmount ?? 0) > 0) refunds = [{ id: 'RF-' + (s.refunds.length + 1), orderId: cur.orderId, returnId: cur.id, source: 'return', amount: cur.refundAmount ?? 0, status: 'Pending', note: o?.payment === 'cod' ? 'Cash on delivery order: ask the customer for UPI or bank details' : 'Return completed', createdAt: Date.now() }, ...s.refunds];
+      }
+      return { ...s, edits, refunds, returns: s.returns.map((x) => (x.id === id ? upd.ret : x)) };
+    });
+    return { ok: true, message: 'Updated' };
+  };
+  const markRefunded: Store['markRefunded'] = async (id, reference) => {
+    if (adminData) { const ok = await adminCall('refund.markRefunded', { id, reference }); if (ok) { await refreshAdmin(); say('Marked as refunded'); } return ok; }
+    setState((s) => ({ ...s, refunds: s.refunds.map((x) => (x.id === id ? { ...x, status: 'Refunded', reference: reference || undefined, processedAt: Date.now() } : x)) }));
+    say('Marked as refunded'); return true;
+  };
 
   const addReview: Store['addReview'] = (r) => {
     if (isLive && supabase) {
@@ -504,12 +595,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const current = (adminData ? adminData.orders : state.orders).find((o) => o.id === id);
     const result = current && compute(current);
     if (!current || !result) { say('This order can no longer be cancelled.'); return false; }
-    if (adminData) { if (!(await adminCall(op, { id, ...args }))) return false; patchAdmin((d) => ({ ...d, orders: d.orders.map((o) => (o.id === id ? result.order : o)), products: d.products.map((p) => restocked(p, result)) })); }
-    else setState((s) => {
-      const edits = { ...s.edits };
-      for (const p of allProducts) { const np = restocked(edits[p.id] ?? p, result); if (np !== (edits[p.id] ?? p)) edits[p.id] = np; }
-      return { ...s, edits, orders: s.orders.map((o) => (o.id === id ? result.order : o)) };
-    });
+    if (adminData) { if (!(await adminCall(op, { id, ...args }))) return false; patchAdmin((d) => ({ ...d, orders: d.orders.map((o) => (o.id === id ? result.order : o)), products: d.products.map((p) => restocked(p, result)) })); void refreshAdmin(); }
+    else localCancel(current, result, typeof args.reason === 'string' && args.reason ? args.reason : 'Cancelled by admin');
     say(result.whole ? 'Order cancelled and stock returned' : 'Item cancelled and stock returned');
     return true;
   };
@@ -544,12 +631,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cart: state.cart, cartCount: state.cart.reduce((n, l) => n + l.qty, 0), addToCart, setQty, removeLine, changeVariant, moveToWishlist,
     wishlist: state.wishlist, isWished: (id) => state.wishlist.includes(id), toggleWish,
     coupon, applyCoupon, removeCoupon, price, placeOrder,
-    orders: adminData?.orders ?? state.orders, advanceOrder, cancelOrder, returns: adminData?.returns ?? state.returns, createReturn, setReturnStatus,
+    orders: adminData?.orders ?? state.orders, advanceOrder, cancelOrder, returns: adminData?.returns ?? state.returns, refunds: adminData?.refunds ?? state.refunds, createReturn, updateReturn, markRefunded,
     reviews: adminData?.reviews ?? state.reviews, addReview, setReviewStatus,
     user: state.user, signIn, signOut, updateUser, addresses: state.addresses, saveAddress, removeAddress,
     coupons: adminData?.coupons ?? state.coupons, saveCoupon, saveProduct, createProduct, archiveProduct, restoreProduct,
     notifyMe, notified: state.notify, prefs: { whatsapp: state.whatsapp, newsletter: state.newsletter }, setPrefs, toast, say,
-    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, adminCancelOrder, adminCancelItem,
+    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, refreshAdmin, adminCancelOrder, adminCancelItem,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

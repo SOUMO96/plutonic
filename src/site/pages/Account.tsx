@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { inr } from '../catalog';
+import { MyOrders } from './MyOrders';
 import { go, Link, type Route } from '../router';
 import { ORDER_STEPS, useStore, type Address } from '../store';
 import { Photo } from '../ui';
@@ -183,35 +184,26 @@ function AddressForm({ initial, onDone }: { initial?: Address; onDone: () => voi
   );
 }
 
-const TABS: [string, string][] = [['overview', 'Overview'], ['profile', 'Profile'], ['orders', 'Order history'], ['wishlist', 'Wishlist'], ['addresses', 'Saved addresses'], ['returns', 'Returns'], ['settings', 'Settings']];
+const TABS: [string, string][] = [['orders', 'Orders'], ['profile', 'Profile'], ['wishlist', 'Wishlist'], ['addresses', 'Saved addresses'], ['settings', 'Settings']];
 
 function Dashboard({ route }: { route: Route }) {
   const { live, user, signOut, orders, addresses, removeAddress, wishlist, product, returns, prefs, setPrefs, updateUser, say } = useStore();
-  const tab = TABS.some(([k]) => k === route.query.get('tab')) ? route.query.get('tab')! : 'overview';
+  const tab = TABS.some(([k]) => k === route.query.get('tab')) ? route.query.get('tab')! : 'orders';
   const [editing, setEditing] = useState<Address | 'new' | null>(null);
   const [prof, setProf] = useState({ firstName: user!.firstName, lastName: user!.lastName, email: user!.email, mobile: user!.mobile });
   const saved = wishlist.map((id) => product(id)).filter((p) => p && p.active);
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const ov = tab === 'overview';
+  const ov = false;   // the account has no overview page: every tab is its own page
 
   return (
     <div className="pl-wrap dash">
       <aside className="dash-nav" aria-label="Account">
         <h1 className="h3">{hello}, {user!.firstName}</h1><span className="muted small">Member since {new Date(user!.since).getFullYear()} {live ? '' : ' · demonstration account'}</span>
-        <nav>{TABS.map(([k, l]) => <Link key={k} to={`/account?tab=${k}`} aria-current={tab === k ? 'page' : undefined}>{l}</Link>)}<Link to="/tracking">Track an order</Link>
-          <button type="button" className="linkbtn" onClick={() => { signOut(); say('Signed out'); go('/'); }}>Sign out</button></nav>
+        <nav>{TABS.map(([k, l]) => <Link key={k} to={`/account?tab=${k}`} aria-current={tab === k ? 'page' : undefined}>{l}</Link>)}          <button type="button" className="linkbtn" onClick={() => { signOut(); say('Signed out'); go('/'); }}>Sign out</button></nav>
       </aside>
       <div className="dash-main tab-enter" key={tab}>
-        {(ov || tab === 'orders') && (
-          <section className="panel"><div className="sec-head"><h2 className="h3">Order history</h2>{ov && <Link className="lbl ulink" to="/account?tab=orders">View all</Link>}</div>
-            {(ov ? orders.slice(0, 3) : orders).map((o) => (
-              <div key={o.id} className="order-row"><div><b>Order #{o.id} · {o.items.reduce((n, i) => n + i.qty, 0)} items</b><span className="muted small">{o.step < 0 ? 'Cancelled' : ORDER_STEPS[o.step]} · {inr(o.total)} · {new Date(o.createdAt).toLocaleDateString('en-IN')}{o.sample ? ' · sample' : ''}</span></div>
-                <div className="row-gap"><Link className="btn btn--ghost btn--sm" to={'/tracking/' + o.id}>Track</Link>{o.step === 4 && <Link className="btn btn--ghost btn--sm" to="/returns">Exchange</Link>}</div></div>
-            ))}
-            {!orders.length && <p className="muted">No orders yet.</p>}
-          </section>
-        )}
+        {tab === 'orders' && <MyOrders route={route} />}
         {(ov || tab === 'profile') && (
           <section className="panel"><h2 className="h3">Profile</h2>
             {tab === 'profile' ? (
@@ -232,11 +224,6 @@ function Dashboard({ route }: { route: Route }) {
             {editing && <AddressForm initial={editing === 'new' ? undefined : editing} onDone={() => setEditing(null)} />}
             {addresses.map((a) => <div key={a.id} className="order-row"><div><b>{a.label}</b><span className="muted small">{a.name}, {a.line1}, {a.city} {a.pin}, {a.state}</span></div><div className="row-gap"><button className="linkbtn" type="button" onClick={() => setEditing(a)}>Edit</button><button className="linkbtn muted" type="button" onClick={() => removeAddress(a.id)}>Remove</button></div></div>)}
             {!addresses.length && !editing && <p className="muted">No saved addresses. They are saved automatically when you check out.</p>}
-          </section>
-        )}
-        {(ov || tab === 'returns') && (
-          <section className="panel"><div className="sec-head"><h2 className="h3">Returns &amp; exchanges</h2><Link className="lbl ulink" to="/returns">Start a request</Link></div>
-            {returns.length === 0 ? <p className="muted">No requests yet.</p> : returns.map((r) => <div key={r.id} className="order-row"><div><b>{r.kind === 'exchange' ? 'Exchange' : 'Return'} · {r.productName}</b><span className="muted small">{r.variant} · {r.reason} · #{r.orderId}</span></div><span className="status">{r.status}</span></div>)}
           </section>
         )}
         {(ov || tab === 'settings') && (

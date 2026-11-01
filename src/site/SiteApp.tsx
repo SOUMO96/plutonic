@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import './site.css';
 import './motion.css';
 import './hover.css';
-import { consumePendingScroll, useRoute } from './router';
+import { consumePendingScroll, go, useRoute } from './router';
 import { StoreProvider } from './store';
 import { Footer, Header, Toast } from './ui';
 import Home from './pages/Home';
@@ -11,7 +11,7 @@ import Listing from './pages/Listing';
 import Product from './pages/Product';
 import Cart from './pages/Cart';
 import Account from './pages/Account';
-import { Tracking, Wishlist, Returns } from './pages/Orders';
+import { Tracking, Wishlist } from './pages/Orders';
 import { About, Support } from './pages/Info';
 
 // Heavier, rarely-first pages are split out of the initial bundle.
@@ -54,6 +54,8 @@ function useScrollReveal(path: string) {
   }, [path]);
 }
 
+function Redirect({ to }: { to: string }) { useEffect(() => { go(to); }, [to]); return null; }
+
 export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }) {
   const route = useRoute();
   const root = route.seg[0] ?? '';
@@ -87,7 +89,8 @@ export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }
     case 'account': page = <Account route={route} />; break;
     case 'tracking': page = <Tracking route={route} />; break;
     case 'wishlist': page = <Wishlist />; break;
-    case 'returns': page = <Returns />; break;
+    // Returns and exchanges now live on each order (Account > Orders); old links land there.
+    case 'returns': page = <Redirect to="/account?tab=orders" />; break;
     case 'about': page = <About />; break;
     case 'support': page = <Support />; break;
     // Default deny: only /admin/login is public; every other /admin/* path goes through the server-verified guard.

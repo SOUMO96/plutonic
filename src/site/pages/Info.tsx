@@ -61,7 +61,7 @@ export function Support() {
       <div className="page-head"><span className="lbl muted">Customer support</span><h1 className="h1">How can we help?</h1></div>
       <div className="grid grid--4 help-tiles">
         <Link to="/tracking" className="help-tile"><b>Track an order</b><span className="muted small">Live status with your order number.</span></Link>
-        <Link to="/returns" className="help-tile"><b>Return or exchange</b><span className="muted small">Start a request and book a pickup.</span></Link>
+        <Link to="/account?tab=orders" className="help-tile"><b>Return or exchange</b><span className="muted small">Start a request and book a pickup.</span></Link>
         <a href="#size-guide" className="help-tile" onClick={(e) => { e.preventDefault(); document.getElementById('size-guide')?.scrollIntoView({ behavior: 'smooth' }); }}><b>Size guide</b><span className="muted small">Measurements for every fit.</span></a>
         <div className="help-tile"><b>Talk to us</b><span className="muted small placeholder">[WhatsApp number] · [support email] · [days and hours] IST</span></div>
       </div>

@@ -219,7 +219,7 @@ export function Footer({ onReplayIntro }: { onReplayIntro?: () => void }) {
         <img src={LOGO} alt="PLUTONIC" className="ftr-logo" />
         <div className="ftr-cols">
           <div><span className="lbl">Shop</span><Link to="/men">Men</Link><Link to="/women">Women</Link><Link to="/shop?new=1">New arrivals</Link><Link to="/shop">Shop all</Link><Link to="/wishlist">Wishlist</Link></div>
-          <div><span className="lbl">Help</span><Link to="/tracking">Track an order</Link><Link to="/returns">Returns &amp; exchanges</Link><Link to="/support">Shipping</Link><Link to="/support">Contact us</Link></div>
+          <div><span className="lbl">Help</span><Link to="/tracking">Track an order</Link><Link to="/account?tab=orders">Returns &amp; exchanges</Link><Link to="/support">Shipping</Link><Link to="/support">Contact us</Link></div>
           <div><span className="lbl">PLUTONIC</span><Link to="/about">Our story</Link><Link to="/support">Size guide</Link><Link to="/support">Privacy</Link><Link to="/support">Terms</Link>{onReplayIntro && <button type="button" className="linkbtn" onClick={onReplayIntro}>Replay the welcome film</button>}</div>
         </div>
         <div className="ftr-base"><span>© PLUTONIC. Beyond the ordinary.</span><span>India · ₹ INR · English</span></div>
