@@ -234,7 +234,7 @@ export function Header() {
           <div className="hdr-actions">
             <button type="button" className="ico" data-search-toggle onClick={() => setSearch((s) => !s)} aria-label="Search" aria-expanded={search}><Search size={20} strokeWidth={1.4} /></button>
             <Link className="ico hdr-hide" to="/account" aria-label="Account"><User size={20} strokeWidth={1.4} /></Link>
-            <Link className="ico hdr-hide" to="/wishlist" aria-label={`Wishlist, ${wishlist.length} saved`}><Heart size={20} strokeWidth={1.4} />{wishlist.length > 0 && <i className="dot" />}</Link>
+            <Link className="ico hdr-hide hdr-wish" to="/wishlist" aria-label={`Wishlist, ${wishlist.length} saved`}><Heart size={20} strokeWidth={1.4} />{wishlist.length > 0 && <i className="dot" />}</Link>
             <Link className="ico" to="/cart" aria-label={`Bag, ${cartCount} items`}><ShoppingBag size={20} strokeWidth={1.4} />{cartCount > 0 && <i key={cartCount} className="count bump">{cartCount}</i>}</Link>
           </div>
         </div>
