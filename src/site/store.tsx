@@ -660,12 +660,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const auth: Auth = {
     signUp: async ({ email, password, firstName, lastName, mobile, fit }) => {
       if (!supabase) return { ok: false, message: 'Accounts are unavailable.' };
-      // Testing phase: the shop creates the account already confirmed and signs the customer straight in (no emailed code).
-      const cfg = await getJson<{ features?: { instantSignup?: boolean } }>('/api/v1/config', 4000);
-      if (cfg?.features?.instantSignup) {
-        let resp: Response; let body: { error?: { message?: string } } = {};
-        try { resp = await fetch('/api/v1/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, firstName, lastName, mobile }) }); body = await resp.json().catch(() => ({})); }
-        catch { return { ok: false, message: 'We could not reach the shop. Please try again.' }; }
+      // The shop creates the account already confirmed and signs the customer straight in (no emailed code). We simply try it:
+      // only if the server says this is switched off (404) do we use the emailed-code route, never because of a slow connection.
+      let resp: Response | null = null; let body: { error?: { message?: string } } = {};
+      for (let attempt = 0; attempt < 2 && !resp; attempt++) {
+        try {
+          const ctl = new AbortController(); const t = window.setTimeout(() => ctl.abort(), 15000);
+          resp = await fetch('/api/v1/auth/signup', { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, firstName, lastName, mobile }) });
+          window.clearTimeout(t); body = await resp.json().catch(() => ({}));
+        } catch { if (attempt === 1) return { ok: false, message: 'We could not reach the shop. Please check your connection and try again.' }; await sleep(800); }
+      }
+      if (resp && resp.status !== 404) {
         if (!resp.ok) return { ok: false, message: resp.status === 429 ? 'Too many sign-ups from this connection. Please try again in a minute.' : body.error?.message ?? 'We could not create your account.' };
         const si = await supabase.auth.signInWithPassword({ email, password });
         if (si.error || !si.data.user) return { ok: true, message: 'Account created. Please log in.' };
