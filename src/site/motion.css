@@ -187,3 +187,9 @@
 .pickup-days button b { font-weight: 600; } .pickup-days button:hover { border-color: #090909; }
 .pickup-days button.on { background: #090909; color: #F2F0EB; border-color: #090909; }
 .rcard-act input[type=date] { cursor: pointer; }
+
+/* Out-of-stock sizes stay selectable (struck through) and explain themselves */
+.sizes button.sold { position: relative; color: var(--muted, #6B675F); background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(9,9,9,.06) 6px 7px); text-decoration: line-through; cursor: pointer; }
+.sizes button.sold.on { background: var(--fg, #090909); color: var(--bg, #F2F0EB); text-decoration: line-through; }
+.oos { border: 1px solid rgba(155,44,31,.5); background: rgba(155,44,31,.06); padding: 14px; display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; } .oos b { color: #9B2C1F; } .oos p { margin: 0; font-size: 13px; }
+.quick-sizes button.sold { text-decoration: line-through; opacity: .55; cursor: pointer; }

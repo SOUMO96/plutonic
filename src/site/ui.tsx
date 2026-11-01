@@ -95,7 +95,7 @@ export function ProductCard({ p, ratio = '4 / 5', priority = false, showQuick = 
           <div className="quick-sizes">
             {p.sizes.map((s) => {
               const n = sizeStock(p, colourId, s);
-              return <button key={s} type="button" disabled={n <= 0} onClick={() => { const r = addToCart(p, colourId, s, 1); say(r.ok ? `${p.name} · ${colour.name} · ${s} added to your bag` : r.message); }}>{s}</button>;
+              return <button key={s} type="button" className={n <= 0 ? 'sold' : undefined} title={n <= 0 ? 'Out of stock' : undefined} onClick={() => { if (n <= 0) { say(`Size ${s} is out of stock in ${colour.name}. Open the piece to save it to your wishlist.`); return; } const r = addToCart(p, colourId, s, 1); say(r.ok ? `${p.name} · ${colour.name} · ${s} added to your bag` : r.message); }}>{s}</button>;
             })}
           </div>
         </div>
