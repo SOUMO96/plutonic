@@ -115,6 +115,20 @@ const kickAutomation = () => {
   } catch { /* ignore */ }
 };
 const REVIEW_COLS = 'id, product_id, name, rating, body, size, fit, status, created_at';
+/** GET a JSON endpoint with a time limit (a slow or dead server must never freeze the page). Returns null on any failure. */
+async function getJson<T>(url: string, ms = 8000): Promise<T | null> {
+  try {
+    const ctl = new AbortController(); const t = window.setTimeout(() => ctl.abort(), ms);
+    const r = await fetch(url, { signal: ctl.signal }); window.clearTimeout(t);
+    return r.ok ? ((await r.json()) as T) : null;
+  } catch { return null; }
+}
+const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
+/** One id per checkout attempt, so a retry of the same attempt can never become a second order. */
+const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : 'k' + Date.now() + Math.random().toString(36).slice(2));
+/** Errors that mean "the system is busy or the network blinked", as opposed to "your order was refused". */
+const transient = (e: { code?: string; message?: string }, status?: number) =>
+  !e.code || ['53300', '57014', '40001', '40P01', '08006', 'PGRST000', 'PGRST001', 'PGRST002', 'PGRST003'].includes(e.code) || [429, 502, 503, 504].includes(status ?? 0) || /fetch|network|timeout|timed out/i.test(e.message ?? '');
 
 function initial(): Persisted {
   const empty: Persisted = {
@@ -181,6 +195,8 @@ export type Store = {
   automation: Automation | null; setAutomation: (key: string, value: string) => Promise<boolean>;
   /** Customer: fetch the latest order / return / refund status from the server. */
   refreshAccount: () => Promise<void>;
+  /** Open live updates for the account while a page needs them; call the returned function to close. */
+  watchAccount: () => () => void;
   reviews: Review[]; addReview: (r: Omit<Review, 'id' | 'createdAt' | 'status'>) => void; setReviewStatus: (id: string, s: Review['status']) => void;
   user: User | null; signIn: (u: Omit<User, 'since'>) => void; signOut: () => void; updateUser: (u: Partial<User>) => void;
   addresses: Address[]; saveAddress: (a: Omit<Address, 'id'> & { id?: string }) => void; removeAddress: (id: string) => void;
@@ -230,39 +246,42 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const loadCatalog = useCallback(async () => {
     if (!supabase) return;
+    // The catalogue comes from the cached API (a CDN copy, so a rush of shoppers never reaches the database). If that is
+    // unreachable, fall back to asking the database directly, so the shop keeps working.
+    const all: Product[] = [];
+    for (let off = 0; off < 1000; off += 100) {
+      const page = await getJson<{ items: Product[] }>('/api/v1/products?limit=100&offset=' + off);
+      if (!page) { all.length = 0; break; }
+      all.push(...page.items); if (page.items.length < 100) { if (all.length) setLiveProducts(all); return; }
+    }
     const { data } = await supabase.from('products').select('data').order('sort');
     if (data?.length) setLiveProducts(data.map((r) => r.data as Product));
+  }, []);
+  const loadReviews = useCallback(async () => {
+    if (!supabase) return;
+    const cached = await getJson<{ items: ReviewRow[] }>('/api/v1/reviews/recent?limit=300');
+    const rows = cached?.items ?? ((await supabase.from('reviews').select(REVIEW_COLS).eq('status', 'Published').order('created_at', { ascending: false }).limit(300)).data as ReviewRow[] | null);
+    if (rows) setState((s) => ({ ...s, reviews: [...rows.map(rowToReview), ...s.reviews.filter((r) => r.status !== 'Published' && !rows.some((x) => x.id === r.id))] }));
   }, []);
 
   useEffect(() => {
     if (!supabase) return;
     const db = supabase;
     void loadCatalog();
-    void db.from('reviews').select(REVIEW_COLS).order('created_at', { ascending: false }).then(({ data }) => {
-      if (data) setState((s) => ({ ...s, reviews: (data as ReviewRow[]).map(rowToReview) }));
-    });
+    void loadReviews();
     const code = state.couponCode;
     if (code) void db.rpc('get_coupon', { p_code: code }).then(({ data }) => { if (data) setState((s) => ({ ...s, coupons: [data as Coupon] })); else setState((s) => ({ ...s, couponCode: '' })); });
 
     const hydrate = async (u: { id: string; email?: string | null; created_at?: string }) => {
       uid.current = u.id;
-      // Live push: when the admin changes one of this customer's orders, returns or refunds, refresh straight away.
-      if (!channelRef.current) {
-        let t = 0;
-        channelRef.current = db.channel('account-' + u.id)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'returns' }, () => { window.clearTimeout(t); t = window.setTimeout(() => refreshRef.current(), 150); })
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { window.clearTimeout(t); t = window.setTimeout(() => refreshRef.current(), 150); })
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'refunds' }, () => { window.clearTimeout(t); t = window.setTimeout(() => refreshRef.current(), 150); })
-          .subscribe();
-      }
       const [prof, addr, wish, ord, ret, rev, ref] = await Promise.all([
         db.from('profiles').select('*').eq('id', u.id).maybeSingle(),
         db.from('addresses').select('id, data').order('created_at'),
         db.from('wishlist').select('product_id'),
-        db.from('orders').select('data').order('created_at', { ascending: false }),
-        db.from('returns').select('data').order('created_at', { ascending: false }),
-        db.from('reviews').select(REVIEW_COLS).order('created_at', { ascending: false }),
-        db.from('refunds').select('*').order('created_at', { ascending: false }),
+        db.from('orders').select('data').order('created_at', { ascending: false }).limit(100),
+        db.from('returns').select('data').order('created_at', { ascending: false }).limit(100),
+        db.from('reviews').select(REVIEW_COLS).eq('user_id', u.id).order('created_at', { ascending: false }).limit(100),
+        db.from('refunds').select('*').order('created_at', { ascending: false }).limit(100),
       ]);
       const p = prof.data;
       setState((s) => {
@@ -275,7 +294,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return {
           ...s, wishlist: merged, addresses: (addr.data ?? []).map((r) => ({ ...(r.data as Address), id: r.id as string })),
           orders: [...mine, ...guest], returns: (ret.data ?? []).map((r) => r.data as ReturnReq), refunds: ((ref.data ?? []) as RefundRow[]).map(rowToRefund),
-          reviews: ((rev.data ?? []) as ReviewRow[]).map(rowToReview),
+          reviews: [...s.reviews.filter((r) => r.status === 'Published'), ...((rev.data ?? []) as ReviewRow[]).map(rowToReview).filter((r) => !s.reviews.some((x) => x.id === r.id && x.status === 'Published'))],
           whatsapp: p?.whatsapp ?? s.whatsapp, newsletter: p?.newsletter ?? s.newsletter,
           user: { firstName: p?.first_name ?? '', lastName: p?.last_name ?? '', email: u.email ?? '', mobile: p?.mobile ?? '', fit: p?.fit ?? undefined, since: Date.parse(u.created_at ?? '') || Date.now() },
         };
@@ -399,12 +418,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const removeCoupon = () => setState((s) => ({ ...s, couponCode: '' }));
 
+  const orderKey = useRef<string | null>(null);
   const placeOrder: Store['placeOrder'] = async (d) => {
     if (!state.cart.length) return { error: 'Your bag is empty.' };
     if (isLive && supabase) {
+      orderKey.current ??= newKey();
       // The database function recomputes prices, discount, shipping and stock; nothing is trusted from here.
-      const { data, error } = await supabase.rpc('place_order', { p: { items: state.cart.map((l) => ({ productId: l.productId, colourId: l.colourId, size: l.size, qty: l.qty })), coupon: state.couponCode, delivery: d.delivery, payment: d.payment, address: d.address, email: d.email, mobile: d.mobile } });
-      if (error) return { error: error.message || 'We could not place your order. Please try again.' };
+      const body = { p: { ...{ items: state.cart.map((l) => ({ productId: l.productId, colourId: l.colourId, size: l.size, qty: l.qty })), coupon: state.couponCode, delivery: d.delivery, payment: d.payment, address: d.address, email: d.email, mobile: d.mobile }, idempotencyKey: orderKey.current } };
+      // Patient and safe: if the shop is busy or the network blinks, wait and try again with the SAME key, so it can never
+      // become two orders. A real refusal (out of stock, bad coupon...) is shown straight away.
+      let data: unknown = null, error: { code?: string; message?: string } | null = null, status = 0;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const r = await supabase.rpc('place_order', body); data = r.data; error = r.error; status = r.status;
+        if (!error || !transient(error, status)) break;
+        if (attempt === 0) {
+          const cfg = await getJson<{ features?: { idempotentOrders?: boolean } }>('/api/v1/config', 4000);
+          if (!cfg?.features?.idempotentOrders) { return { error: 'We could not confirm your order. Please check My Orders before trying again, so you are not charged twice.' }; }
+        }
+        say('Lots of people are ordering right now. Still placing your order, please keep this page open…');
+        await sleep(700 * 2 ** attempt + Math.random() * 400);
+      }
+      if (error) {
+        if (!transient(error, status)) orderKey.current = null;   // refused for real: the next try is a fresh attempt
+        return { error: (error.message && !transient(error, status) ? error.message : '') || 'The shop is very busy. Your order was not lost: press Place order again in a moment.' };
+      }
+      orderKey.current = null;
       const order = data as Order;
       if (!uid.current) { try { window.sessionStorage.setItem(GUEST_KEY, JSON.stringify([order, ...guestOrders()])); } catch { /* ignore */ } }
       setState((s) => ({ ...s, orders: [order, ...s.orders], cart: [], couponCode: '' }));
@@ -487,15 +525,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!supabase || !uid.current) return;
     const db = supabase;
     const [ord, ret, ref] = await Promise.all([
-      db.from('orders').select('data').order('created_at', { ascending: false }),
-      db.from('returns').select('data').order('created_at', { ascending: false }),
-      db.from('refunds').select('*').order('created_at', { ascending: false }),
+      db.from('orders').select('data').order('created_at', { ascending: false }).limit(100),
+      db.from('returns').select('data').order('created_at', { ascending: false }).limit(100),
+      db.from('refunds').select('*').order('created_at', { ascending: false }).limit(100),
     ]);
     if (ord.error || ret.error || ref.error) return;
     const mine = (ord.data ?? []).map((r) => r.data as Order);
     setState((s) => ({ ...s, orders: [...mine, ...s.orders.filter((o) => !mine.some((m) => m.id === o.id))], returns: (ret.data ?? []).map((r) => r.data as ReturnReq), refunds: ((ref.data ?? []) as RefundRow[]).map(rowToRefund) }));
   }, []);
   useEffect(() => { refreshRef.current = () => { void refreshAccount(); }; }, [refreshAccount]);
+  /**
+   * Live push for this customer's orders, returns and refunds. Only open while a page that needs it is on screen (a connection
+   * per visitor for the whole session would hit the realtime connection limit long before the shop's real capacity).
+   * Returns a function that closes it. If push is unavailable the page's own timer still keeps things fresh.
+   */
+  const watchers = useRef(0);
+  const watchAccount = useCallback(() => {
+    watchers.current += 1;
+    if (supabase && uid.current && !channelRef.current) {
+      let t = 0; const poke = () => { window.clearTimeout(t); t = window.setTimeout(() => refreshRef.current(), 150); };
+      channelRef.current = supabase.channel('account-' + uid.current)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'returns' }, poke)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, poke)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'refunds' }, poke)
+        .subscribe();
+    }
+    return () => {
+      watchers.current = Math.max(0, watchers.current - 1);
+      if (watchers.current === 0 && channelRef.current && supabase) { void supabase.removeChannel(channelRef.current); channelRef.current = null; }
+    };
+  }, []);
   const lookupOrder: Store['lookupOrder'] = async (id, email) => {
     if (!supabase) return null;
     const { data } = await supabase.rpc('track_order', { p_id: id, p_email: email });
@@ -704,7 +763,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     user: state.user, signIn, signOut, updateUser, addresses: state.addresses, saveAddress, removeAddress,
     coupons: adminData?.coupons ?? state.coupons, saveCoupon, saveProduct, createProduct, archiveProduct, restoreProduct,
     notifyMe, notified: state.notify, prefs: { whatsapp: state.whatsapp, newsletter: state.newsletter }, setPrefs, toast, say,
-    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, refreshAdmin, refreshAccount, automation: adminData?.automation ?? null, setAutomation, adminCancelOrder, adminCancelItem,
+    live: isLive, authReady, auth, lookupOrder, adminStatus, enterAdmin, leaveAdmin, refreshAdmin, refreshAccount, watchAccount, automation: adminData?.automation ?? null, setAutomation, adminCancelOrder, adminCancelItem,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

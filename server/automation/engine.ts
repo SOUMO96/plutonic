@@ -19,6 +19,12 @@ import { exchangeToRefund, log, logOnce, moveReturn, readSettings, setOrderStep 
 import type { Order, ReturnReq } from '../../src/site/store';
 
 let running = false;
+/** Run `fn` over `items` a few at a time (so a sale's worth of orders is worked through in parallel, without flooding the database or a courier API). Returns how many reported work done. */
+async function each<T>(items: T[], fn: (x: T) => Promise<boolean | void>, size = 8): Promise<number> {
+  let n = 0;
+  for (let i = 0; i < items.length; i += size) n += (await Promise.all(items.slice(i, i + size).map(fn))).filter(Boolean).length;
+  return n;
+}
 const ist = (days = 0) => new Date(Date.now() + 5.5 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
 
 async function patchOrder(db: SupabaseClient, id: string, patch: Partial<Order> & Record<string, unknown>) {
@@ -50,28 +56,25 @@ export function reviewReason(r: ReturnReq, itemValue: number | null, recentReque
 
 async function approvals(db: SupabaseClient, cfg: Record<string, string>): Promise<number> {
   if (cfg.auto_approve_returns !== 'on') return 0;
-  const { data: rows } = await db.from('returns').select('id, user_id, order_id, data').eq('status', 'Requested').limit(50);
-  let n = 0;
-  for (const row of rows ?? []) {
+  const { data: rows } = await db.from('returns').select('id, user_id, order_id, data').eq('status', 'Requested').limit(200);
+  return each(rows ?? [], async (row) => {
     const r = row.data as ReturnReq;
-    if (r.needsReview) continue;
+    if (r.needsReview) return;
     const { data: ord } = await db.from('orders').select('data').eq('id', row.order_id).maybeSingle();
     const item = ord?.data?.items?.[r.itemIndex ?? -1];
     const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
     const { count } = await db.from('returns').select('id', { count: 'exact', head: true }).eq('user_id', row.user_id).gte('created_at', since).neq('id', r.id);
     const why = reviewReason(r, item ? item.price * item.qty : null, count ?? 0, cfg);
-    if (why) { if (await flagReview(db, r, why)) n++; continue; }
+    if (why) return flagReview(db, r, why);
     const a = await moveReturn(db, r.id, 'Approved');
     if ('http' in a) {
-      if (a.error === 'invalid_transition' || a.error === 'changed') continue;   // another run (or a person) already handled it
-      if (await flagReview(db, r, a.message)) n++;
-      continue;
+      if (a.error === 'invalid_transition' || a.error === 'changed') return;   // another run (or a person) already handled it
+      return flagReview(db, r, a.message);
     }
     const p = await moveReturn(db, r.id, 'Pickup scheduled', { pickupDate: ist(1), pickupSlot: '9 am – 1 pm' });
     await log(db, r.id, 'Approved automatically', 'http' in p ? `Approved, but the pickup could not be scheduled: ${p.message}` : `Pickup booked for tomorrow, 9 am – 1 pm (${r.kind}, ${r.productName})`, 'http' in p ? 'review' : 'info');
-    n++;
-  }
-  return n;
+    return true;
+  });
 }
 
 async function bookShipment(db: SupabaseClient, courier: Courier, kind: ShipmentKind, order: Order, ref: string, returnId: string | null, extra: { pickupDate?: string; pickupSlot?: string } = {}) {
@@ -89,51 +92,50 @@ async function couriers(db: SupabaseClient, courier: Courier): Promise<number> {
   if (fresh?.length) {
     const { data: have } = await db.from('shipments').select('order_id').eq('kind', 'delivery').in('order_id', fresh.map((o) => o.id));
     const done = new Set((have ?? []).map((h) => h.order_id));
-    for (const row of fresh) {
-      if (done.has(row.id)) continue;
+    n += await each(fresh, async (row) => {
+      if (done.has(row.id)) return;
       const b = await bookShipment(db, courier, 'delivery', row.data as Order, row.id, null);
-      if (!b) continue;
+      if (!b) return;
       await setOrderStep(db, row.id, 1, { awb: b.awb, courier: b.courier });   // packed and its tracking number, in one write
-      await log(db, row.id, 'Order packed, courier booked', `AWB ${b.awb} (${b.courier})`); n++;
-    }
+      await log(db, row.id, 'Order packed, courier booked', `AWB ${b.awb} (${b.courier})`); return true;
+    });
   }
   // 3a. pickups for returns/exchanges whose pickup is scheduled (by the automation or by a person)
   const { data: sched } = await db.from('returns').select('id, order_id, data').eq('status', 'Pickup scheduled').limit(100);
   if (sched?.length) {
     const { data: have } = await db.from('shipments').select('return_id').eq('kind', 'pickup').in('return_id', sched.map((r) => r.id));
     const done = new Set((have ?? []).map((h) => h.return_id));
-    for (const row of sched) {
-      if (done.has(row.id)) continue;
-      const { data: ord } = await db.from('orders').select('data').eq('id', row.order_id).maybeSingle(); if (!ord) continue;
+    n += await each(sched, async (row) => {
+      if (done.has(row.id)) return;
+      const { data: ord } = await db.from('orders').select('data').eq('id', row.order_id).maybeSingle(); if (!ord) return;
       const r = row.data as ReturnReq;
       const b = await bookShipment(db, courier, 'pickup', ord.data as Order, row.id, row.id, { pickupDate: r.pickupDate, pickupSlot: r.pickupSlot });
-      if (!b) continue;
+      if (!b) return;
       await patchReturn(db, row.id, { pickupAwb: b.awb } as Partial<ReturnReq>);
-      await log(db, row.id, 'Pickup booked with courier', `AWB ${b.awb}, ${r.pickupDate} ${r.pickupSlot ?? ''}`); n++;
-    }
+      await log(db, row.id, 'Pickup booked with courier', `AWB ${b.awb}, ${r.pickupDate} ${r.pickupSlot ?? ''}`); return true;
+    });
   }
   // 3b. replacement parcels for exchanges that were packed
   const { data: packed } = await db.from('returns').select('id, order_id, data').eq('status', 'Replacement packed').limit(100);
   if (packed?.length) {
     const { data: have } = await db.from('shipments').select('return_id').eq('kind', 'replacement').in('return_id', packed.map((r) => r.id));
     const done = new Set((have ?? []).map((h) => h.return_id));
-    for (const row of packed) {
-      if (done.has(row.id)) continue;
-      const { data: ord } = await db.from('orders').select('data').eq('id', row.order_id).maybeSingle(); if (!ord) continue;
+    n += await each(packed, async (row) => {
+      if (done.has(row.id)) return;
+      const { data: ord } = await db.from('orders').select('data').eq('id', row.order_id).maybeSingle(); if (!ord) return;
       const b = await bookShipment(db, courier, 'replacement', ord.data as Order, row.id, row.id);
-      if (!b) continue;
+      if (!b) return;
       await patchReturn(db, row.id, { awb: b.awb } as Partial<ReturnReq>);
-      await log(db, row.id, 'Replacement parcel booked', `AWB ${b.awb}`); n++;
-    }
+      await log(db, row.id, 'Replacement parcel booked', `AWB ${b.awb}`); return true;
+    });
   }
   // 4. progress: ask the courier about every parcel that is still moving
   if (courier.poll) {
     const { data: active } = await db.from('shipments').select('*').not('status', 'in', '(delivered,rto,failed)').order('id').limit(300);
-    for (const s of (active ?? []) as ShipmentRow[]) {
-      if (s.courier !== courier.name) continue;
-      const next = await courier.poll(s);
-      if (next) { await applyCourierEvent(db, s, next); n++; }
-    }
+    n += await each(((active ?? []) as ShipmentRow[]).filter((x) => x.courier === courier.name), async (s) => {
+      const next = await courier.poll!(s);
+      if (next) { await applyCourierEvent(db, s, next); return true; }
+    }, 10);
   }
   return n;
 }
@@ -229,10 +231,8 @@ async function autoRefund(db: SupabaseClient, cfg: Record<string, string>, retur
 /** Retry every refund that is still waiting (cancelled orders, failed gateway calls, refunds from before auto-refund was on). */
 async function refundSweep(db: SupabaseClient, cfg: Record<string, string>): Promise<number> {
   if (cfg.auto_refund !== 'on') return 0;
-  const { data: rows } = await db.from('refunds').select('id, order_id, amount, return_id').eq('status', 'Pending').order('id').limit(50);
-  let n = 0;
-  for (const rf of rows ?? []) if (await payRefund(db, rf, true)) n++;
-  return n;
+  const { data: rows } = await db.from('refunds').select('id, order_id, amount, return_id').eq('status', 'Pending').order('id').limit(100);
+  return each(rows ?? [], (rf) => payRefund(db, rf, true), 5);
 }
 
 const lastActivity = (r: ReturnReq) => Math.max(r.createdAt ?? 0, ...(r.history ?? []).map((h) => h.at));
@@ -260,21 +260,40 @@ async function watchdog(db: SupabaseClient, cfg: Record<string, string>): Promis
   return n;
 }
 
-/** Run everything that is due. Never throws: a failure is written to the log. */
+/** One pass over everything that is due. */
+async function pass(db: SupabaseClient, cfg: Record<string, string>): Promise<number> {
+  let actions = await approvals(db, cfg);
+  const courier = activeCourier();
+  if (courier && cfg.auto_courier === 'on') actions += await couriers(db, courier);
+  actions += await refundSweep(db, cfg);
+  actions += await watchdog(db, cfg);
+  return actions;
+}
+
+/**
+ * Run everything that is due. Never throws: a failure is written to the log.
+ * Safe with any number of servers: a database lease lets only one work at a time (and if the database cannot grant one,
+ * this server's own flag is the fallback). It keeps going while there is work, for up to ~25 seconds, so a sale's backlog is
+ * drained in one go instead of a hundred orders a minute.
+ */
 export async function tick(): Promise<{ actions: number }> {
   if (running) return { actions: 0 };
   running = true;
+  let db: SupabaseClient | null = null;
   try {
-    const db = serviceClient();
-    const cfg = await readSettings(db);
-    let actions = await approvals(db, cfg);
-    const courier = activeCourier();
-    if (courier && cfg.auto_courier === 'on') actions += await couriers(db, courier);
-    actions += await refundSweep(db, cfg);
-    actions += await watchdog(db, cfg);
-    return { actions };
+    db = serviceClient();
+    const { data: got, error } = await db.rpc('acquire_lease', { p_name: 'tick', p_seconds: 40 });
+    if (!error && got === false) return { actions: 0 };   // another server is already working
+    const stop = Date.now() + 25_000;
+    let total = 0, n = 0;
+    // the switches are read again on every pass, so turning one off takes effect at once, even in the middle of a long run
+    do { n = await pass(db, await readSettings(db)); total += n; } while (n > 0 && Date.now() < stop);
+    return { actions: total };
   } catch (e) {
     try { await log(serviceClient(), 'automation', 'Error', String((e as Error).message ?? e).slice(0, 300), 'error'); } catch { /* nothing more to do */ }
     return { actions: 0 };
-  } finally { running = false; }
+  } finally {
+    running = false;
+    if (db) { try { await db.rpc('release_lease', { p_name: 'tick' }); } catch { /* the lease simply expires */ } }
+  }
 }

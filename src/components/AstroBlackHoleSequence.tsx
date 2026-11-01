@@ -26,6 +26,12 @@ type Props = {
  * VP9 transcodes of the approved NASA pullback: 1080p on desktop and 720p on
  * smaller screens. The original NASA MP4 remains as a compatibility fallback.
  */
+/** On a slow connection or with Data Saver on, use the small clip (a quarter of the size) instead of the full-size one. */
+const leanConnection = () => {
+  const c = (typeof navigator !== 'undefined' ? (navigator as unknown as { connection?: { saveData?: boolean; effectiveType?: string } }).connection : undefined);
+  return !!c && (!!c.saveData || /^(slow-2g|2g|3g)$/.test(c.effectiveType ?? ''));
+};
+
 export default function AstroBlackHoleSequence({
   mode,
   reducedMotion = false,
@@ -38,7 +44,7 @@ export default function AstroBlackHoleSequence({
   const [videoAvailable, setVideoAvailable] = useState(false);
   const [showObservation, setShowObservation] = useState(true);
   const [videoSrc, setVideoSrc] = useState<string>(() => (
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
+    typeof window !== 'undefined' && (window.matchMedia('(max-width: 900px)').matches || leanConnection())
       ? CLIP.mobileSrc
       : CLIP.desktopSrc
   ));
@@ -47,7 +53,7 @@ export default function AstroBlackHoleSequence({
     const media = window.matchMedia('(max-width: 900px)');
     const updateSource = () => {
       if (!fallbackUsed.current) {
-        setVideoSrc(media.matches ? CLIP.mobileSrc : CLIP.desktopSrc);
+        setVideoSrc(media.matches || leanConnection() ? CLIP.mobileSrc : CLIP.desktopSrc);
       }
     };
     updateSource();

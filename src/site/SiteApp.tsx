@@ -5,6 +5,7 @@ import './hover.css';
 import { consumePendingScroll, go, Link, useRoute } from './router';
 import { StoreProvider } from './store';
 import { Footer, Header, Toast } from './ui';
+import { ErrorBoundary } from './ErrorBoundary';
 import Home from './pages/Home';
 import Collection from './pages/Collection';
 import Listing from './pages/Listing';
@@ -110,7 +111,7 @@ export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }
         {!bare && <Header />}
         <main id="main" className="pl-main" tabIndex={-1}>
           <div key={route.path} className="page-enter">
-            <Suspense fallback={<div className="pl-wrap" style={{ minHeight: '60vh' }} aria-busy="true" />}>{page}</Suspense>
+            <ErrorBoundary resetKey={route.path}><Suspense fallback={<div className="pl-wrap" style={{ minHeight: '60vh' }} aria-busy="true" />}>{page}</Suspense></ErrorBoundary>
           </div>
         </main>
         {!bare && <Footer onReplayIntro={onReplayIntro} />}

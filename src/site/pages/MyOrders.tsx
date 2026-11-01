@@ -176,16 +176,21 @@ function OrderWidget({ o }: { o: Order }) {
 
 /** Orders: a quiet list; select one to open it. */
 export function MyOrders({ route }: { route: Route }) {
-  const { orders, refreshAccount } = useStore();
+  const { orders, refreshAccount, watchAccount, user } = useStore();
   const focus = route.query.get('order');
   // Keep this page in step with the server: when the admin approves, schedules or ships, it shows here by itself
-  // (live push from the database, with a 4-second check as backup).
+  // (live push from the database, with a slower check as backup).
   useEffect(() => {
     void refreshAccount();
-    const tick = () => { if (!document.hidden) void refreshAccount(); };
-    const t = window.setInterval(tick, 4_000); document.addEventListener('visibilitychange', tick);
-    return () => { window.clearInterval(t); document.removeEventListener('visibilitychange', tick); };
-  }, [refreshAccount]);
+    // Live push does the instant updates; this slower check (randomised so thousands of open pages never ask at the same moment)
+    // is only the safety net, and it pauses while the tab is hidden.
+    let timer = 0;
+    const loop = () => { timer = window.setTimeout(() => { if (!document.hidden) void refreshAccount(); loop(); }, 12_000 + Math.random() * 8_000); };
+    const onVisible = () => { if (!document.hidden) void refreshAccount(); };
+    loop(); document.addEventListener('visibilitychange', onVisible);
+    const stopWatching = watchAccount();
+    return () => { window.clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); stopWatching(); };
+  }, [refreshAccount, watchAccount, user?.email]);
   const list = [...orders].sort((a, b) => b.createdAt - a.createdAt);
   if (focus) {
     const o = orders.find((x) => x.id === focus);

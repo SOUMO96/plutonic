@@ -8,20 +8,34 @@ import { courierByName, type ShipmentRow } from '../courier';
 type Result = unknown | { __status: number; body: unknown };
 type Handler = (c: Ctx) => Promise<Result>;
 type Auth = 'none' | 'optional' | 'required';
-type Route = { method: string; parts: string[]; handler: Handler; auth: Auth; bucket: string; max: number; raw?: boolean };
+type Route = { method: string; parts: string[]; handler: Handler; auth: Auth; bucket: string; max: number; raw?: boolean; cache?: string };
 
 const created = (body: unknown) => ({ __status: 201, body });
 /** Routes where abuse costs money or leaks data: their limits are counted in the database, not per server instance. */
 const SHARED_BUCKETS = new Set(['coupon', 'checkout', 'track', 'pay', 'kick', 'tick']);
 const UUIDISH = /^[\w-]{1,64}$/;
 const routes: Route[] = [];
-function add(method: string, path: string, auth: Auth, handler: Handler, o: { bucket?: string; max?: number; raw?: boolean } = {}) {
-  routes.push({ method, parts: path.split('/').filter(Boolean), handler, auth, bucket: o.bucket ?? 'api', max: o.max ?? 120, raw: o.raw });
+function add(method: string, path: string, auth: Auth, handler: Handler, o: { bucket?: string; max?: number; raw?: boolean; cache?: string } = {}) {
+  routes.push({ method, parts: path.split('/').filter(Boolean), handler, auth, bucket: o.bucket ?? 'api', max: o.max ?? 120, raw: o.raw, cache: o.cache });
 }
+/** Public data every visitor asks for: the CDN keeps a copy for a short while, so a rush of shoppers hits the CDN, not the database. */
+const PUBLIC_CACHE = 'public, s-maxage=20, stale-while-revalidate=300, stale-if-error=3600';
 const must = <T>(r: { data: T | null; error: { code?: string; message: string } | null }): T => { if (r.error) dbFail(r.error); return r.data as T; };
 
 // ------------------------------------------------------------------ public catalogue
-add('GET', '/config', 'none', async () => ({ version: 'v1', payments: { cashfree: cashfreeConfigured(), mode: cashfreeConfigured() ? cashfreeMode() : null } }));
+add('GET', '/config', 'none', async () => {
+  // Safe automatic retries of an order need the idempotency column (migration 011); say so only when it exists.
+  let idempotentOrders = false;
+  try { const { error } = await serviceClient().from('orders').select('idempotency_key').limit(0); idempotentOrders = !error; } catch { /* leave false */ }
+  return { version: 'v1', payments: { cashfree: cashfreeConfigured(), mode: cashfreeConfigured() ? cashfreeMode() : null }, features: { idempotentOrders } };
+}, { cache: PUBLIC_CACHE });
+// Uptime monitors call this. It touches the database with one tiny query and says how long that took.
+add('GET', '/health', 'none', async ({ db }) => {
+  const t = Date.now();
+  const { error } = await db.from('products').select('id').limit(1);
+  if (error) throw new ApiError(503, 'unhealthy', 'The database is not answering.');
+  return { ok: true, database_ms: Date.now() - t, time: new Date().toISOString() };
+}, { bucket: 'health', max: 120 });
 
 add('GET', '/products', 'none', async ({ db, url }) => {
   const q = url.searchParams;
@@ -32,13 +46,13 @@ add('GET', '/products', 'none', async ({ db, url }) => {
   const lim = Math.min(100, Math.max(1, Number(q.get('limit')) || 50)), off = Math.max(0, Number(q.get('offset')) || 0);
   const rows = must(await query.range(off, off + lim - 1));
   return { items: rows.map((r: any) => r.data), limit: lim, offset: off };
-});
+}, { cache: PUBLIC_CACHE });
 add('GET', '/products/:id', 'none', async ({ db, params }) => {
   const r = must(await db.from('products').select('data').eq('id', params.id).maybeSingle());
   if (!r) throw new ApiError(404, 'not_found', 'Product not found.');
   return (r as any).data;
-});
-add('GET', '/categories', 'none', async ({ db }) => ({ items: must(await db.from('categories').select('slug, gender, name').order('sort')) }));
+}, { cache: PUBLIC_CACHE });
+add('GET', '/categories', 'none', async ({ db }) => ({ items: must(await db.from('categories').select('slug, gender, name').order('sort')) }), { cache: PUBLIC_CACHE });
 add('GET', '/coupons/:code', 'none', async ({ db, params }) => {
   const r = must(await db.rpc('get_coupon', { p_code: params.code }));
   if (!r) throw new ApiError(404, 'not_found', 'That code is not valid.');
@@ -48,7 +62,12 @@ add('GET', '/reviews', 'none', async ({ db, url }) => {
   const pid = url.searchParams.get('productId') ?? '';
   if (!UUIDISH.test(pid)) throw new ApiError(400, 'invalid', 'productId is required.');
   return { items: must(await db.from('reviews').select('id, name, rating, body, size, fit, created_at').eq('product_id', pid).eq('status', 'Published').order('created_at', { ascending: false }).limit(100)) };
-});
+}, { cache: PUBLIC_CACHE });
+// The newest published reviews across the shop (what the storefront shows), cached like the catalogue.
+add('GET', '/reviews/recent', 'none', async ({ db, url }) => {
+  const lim = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 300));
+  return { items: must(await db.from('reviews').select('id, product_id, name, rating, body, size, fit, status, created_at').eq('status', 'Published').order('created_at', { ascending: false }).limit(lim)) };
+}, { cache: PUBLIC_CACHE });
 
 // ------------------------------------------------------------------ checkout, orders (guest allowed on checkout/track)
 add('POST', '/orders', 'required', async ({ db, body }) => {
@@ -275,7 +294,7 @@ export async function handleV1(req: IncomingMessage, res: ServerResponse) {
     if (route.auth === 'required') await ctx.user();
     const result = (await route.handler(ctx)) as any;
     if (result && typeof result === 'object' && '__status' in result) return out(res, result.__status, result.body);
-    return out(res, 200, result ?? { ok: true });
+    return out(res, 200, result ?? { ok: true }, route.cache ? { 'Cache-Control': route.cache } : {});
   } catch (e) {
     if (e instanceof ApiError) return out(res, e.status, { error: { code: e.code, message: e.message } }, e.status === 429 ? { 'Retry-After': '60' } : {});
     console.error('api/v1 error', e);
