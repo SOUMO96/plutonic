@@ -50,5 +50,17 @@
       "source": "/api/v1/:path*",
       "destination": "/api/v1?__p=:path*"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/admin",
+      "destination": "/#/admin/login",
+      "permanent": false
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/#/admin/login",
+      "permanent": false
+    }
   ]
 }
