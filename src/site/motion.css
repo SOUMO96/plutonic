@@ -576,3 +576,9 @@ html, body { max-width: 100%; overflow-x: clip; }
   .wl-title span { white-space: normal; overflow: visible; text-overflow: clip; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .wl-title { flex-direction: column; gap: 2px; }
 }
+
+/* "New version available" bar (service worker update) */
+.pl-update { position: fixed; left: 16px; bottom: 16px; z-index: 120; display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 32px); padding: 12px 14px 12px 18px; background: #090909; color: #F2F0EB; border: 1px solid rgba(242,240,235,.25); box-shadow: 0 10px 30px rgba(0,0,0,.35); font: 400 14px Inter, sans-serif; }
+.pl-update button { min-height: 36px; padding: 0 14px; background: #F2F0EB; color: #090909; border: 0; cursor: pointer; font: 500 12px Manrope, sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+.pl-update .pl-update-x { background: transparent; color: #F2F0EB; padding: 0 6px; font-size: 20px; letter-spacing: 0; }
+@media (max-width: 640px) { .pl-update { left: 12px; right: 12px; bottom: 12px; max-width: none; justify-content: space-between; } }

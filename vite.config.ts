@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import fs from 'node:fs';
 import path from 'path';
 import {defineConfig, loadEnv, type Plugin} from 'vite';
+import {VitePWA} from 'vite-plugin-pwa';
 
 /**
  * Dev only: Vite does not run Vercel functions, so mount the same `api/` handlers as
@@ -57,7 +58,31 @@ function devApi(mode: string): Plugin {
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
-    plugins: [react(), tailwindcss(), devApi(mode)],
+    plugins: [
+      react(), tailwindcss(), devApi(mode),
+      // Service worker (src/sw.ts) + installable manifest. Never active in `npm run dev`.
+      VitePWA({
+        strategies: 'injectManifest', srcDir: 'src', filename: 'sw.ts',
+        registerType: 'prompt', injectRegister: false, devOptions: {enabled: false},
+        manifestFilename: 'manifest.webmanifest',
+        manifest: {
+          name: 'PLUTONIC', short_name: 'PLUTONIC', description: 'PLUTONIC — beyond the ordinary. Considered essentials, distinct by design.',
+          start_url: '/', scope: '/', display: 'standalone', background_color: '#0E0E0E', theme_color: '#050607',
+          icons: [
+            {src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png'},
+            {src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png'},
+            {src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable'},
+          ],
+        },
+        // Precache ONLY the app shell: index.html and the hashed JS/CSS. Not the admin chunk, fonts, images, media or icons.
+        injectManifest: {
+          globPatterns: ['index.html', 'assets/**/*.js', 'assets/**/*.css'],
+          globIgnores: ['**/Admin-*.js'],
+          maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
+          rollupFormat: 'iife',
+        },
+      }),
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
