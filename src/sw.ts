@@ -4,9 +4,9 @@
  *
  * Purpose: repeat visits start instantly from the device. It is deliberately small and strict.
  *
- *   NEVER cached (always straight to the network): anything under /api/, the admin pages, anything cross-origin (Supabase,
- *   Cashfree, fonts, NASA/ESO), any non-GET request, any request carrying an Authorization header, /media (the intro video),
- *   and this file and the manifest. These are matched by an explicit denylist registered FIRST.
+ *   NEVER touched (the worker does not even intercept them; they go straight to the network): anything under /api/, the admin pages,
+ *   anything cross-origin (Supabase, Cashfree, fonts, NASA/ESO), any non-GET request, any request carrying an Authorization header,
+ *   /media (the intro video), and this file and the manifest. An explicit denylist (`denied`) guards EVERY cached route below.
  *
  *   Cached, and only these:
  *     - the app shell: index.html + the hashed JS/CSS in /assets (precache, versioned by content hash)
@@ -21,7 +21,7 @@
 import { cacheNames, clientsClaim } from 'workbox-core';
 import { cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from 'workbox-precaching';
 import { registerRoute, setCatchHandler } from 'workbox-routing';
-import { CacheFirst, NetworkFirst, NetworkOnly } from 'workbox-strategies';
+import { CacheFirst, NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> };
@@ -42,23 +42,21 @@ const storeableOnly = {
   },
 };
 
-// 1) The denylist. Registered first, so it wins over everything below.
-registerRoute(
-  ({ request, url }) =>
-    url.origin !== self.location.origin ||
-    request.method !== 'GET' ||
-    request.headers.has('Authorization') ||
-    url.pathname.startsWith('/api/') ||
-    url.pathname === '/admin' || url.pathname.startsWith('/admin/') ||
-    url.pathname.startsWith('/media/') ||
-    url.pathname === '/sw.js' || url.pathname === '/manifest.webmanifest',
-  new NetworkOnly(),
-);
+// 1) The denylist. Every cached route below starts with `!denied(...)`, and there is no catch-all route, so a denied request
+//    matches nothing: the worker never responds to it and the browser handles it as if there were no worker at all.
+const denied = (request: Request, url: URL) =>
+  url.origin !== self.location.origin ||
+  request.method !== 'GET' ||
+  request.headers.has('Authorization') ||
+  url.pathname.startsWith('/api/') ||
+  url.pathname === '/admin' || url.pathname.startsWith('/admin/') ||
+  url.pathname.startsWith('/media/') ||
+  url.pathname === '/sw.js' || url.pathname === '/manifest.webmanifest';
 
 // 2) The HTML navigation. The app is a hash-router SPA, so every page is the same "/" document.
 //    Network first so a new deploy shows up at once; if the network is slow (3 s) or down, use the cached shell.
 registerRoute(
-  ({ request, url }) => request.mode === 'navigate' && (url.pathname === '/' || url.pathname === '/index.html'),
+  ({ request, url }) => !denied(request, url) && request.mode === 'navigate' && (url.pathname === '/' || url.pathname === '/index.html'),
   new NetworkFirst({
     cacheName: NAV_CACHE,
     networkTimeoutSeconds: 3,
@@ -73,7 +71,7 @@ registerRoute(
 
 // 3) Images and the logo.
 registerRoute(
-  ({ url }) => url.origin === self.location.origin && (url.pathname.startsWith('/images/') || url.pathname.startsWith('/plutonic-logo')),
+  ({ request, url }) => !denied(request, url) && (url.pathname.startsWith('/images/') || url.pathname.startsWith('/plutonic-logo')),
   new CacheFirst({
     cacheName: IMG_CACHE,
     plugins: [storeableOnly, new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true })],
