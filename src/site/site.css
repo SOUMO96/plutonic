@@ -1,7 +1,6 @@
 /* PLUTONIC storefront — implementation of the approved Claude Design.
    Tokens: Obsidian #090909, Deep Charcoal #171717, Graphite #292929, Warm Ivory #F2F0EB,
    Stone #B8B2A7, Chalk #DCD7CE, Horizon Silver #C9CBD0. Type: Manrope (display, labels) + Inter (text). */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Manrope:wght@300;400;500;600&display=swap');
 
 .pl {
   --obs: #090909; --char: #171717; --graph: #292929; --ivory: #F2F0EB; --stone: #B8B2A7; --chalk: #DCD7CE; --silver: #C9CBD0;
