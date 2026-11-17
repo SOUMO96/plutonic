@@ -23,6 +23,8 @@ Treat these as a floor: they came from a home connection to a small database. Th
 - **Pages fail softly.** An error in one page shows "This page could not load" with a reload button; the header, bag and footer keep working.
 - **Abuse limits are shared.** Checkout, coupons, tracking, payment and admin sign-in are rate limited in the database, so the limit holds across every server. Cash-on-delivery is capped per customer and coupons are one use per customer.
 - **Heavy files are cached and slow connections are spared.** Static assets are cached for a year, the intro film is skipped down to the small version on Data Saver or 2G/3G.
+- **Repeat visits start from the device.** A small service worker (`src/sw.ts`) keeps the app shell (HTML, hashed JS/CSS), images and the logo on the visitor's device. The page is fetched from the network first (3 s timeout) so a new deploy shows at once; offline or slow, the saved shell opens. It never touches `/api`, admin, Supabase, Cashfree, other sites, non-GET requests or anything with an Authorization header, and caches are wiped on customer and admin sign-out. A new version shows a "New version available" bar; nothing reloads by itself.
+- **A database stampede is absorbed in two layers.** The CDN serves public catalogue reads; behind it a tiny per-server cache (`server/v1/memo.ts`) lets one query per key run every few seconds while everyone else shares the answer (and serves the last good answer if the database stumbles). Public routes use an anonymous database client and ignore the caller's token, so nothing user-specific can ever be shared.
 - **Health check:** `GET /api/v1/health` returns the database response time. Point an uptime monitor at it.
 
 ## Before a real sale: your checklist

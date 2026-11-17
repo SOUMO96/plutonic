@@ -6,6 +6,7 @@ import {
 import { CUSTOMER_CANCEL_BEFORE, cancelItem as cancelItemRule, cancelWhole as cancelWholeRule, type Cancelled } from './orderCancel';
 import { applyUpdate, buildBatch, currentPiece, requestError, type BatchInput, type Update } from './returnRules';
 import { isLive, supabase } from './supabase';
+import { purgeUserCaches } from '../pwa';
 import { parseW, wkey } from './wishlist';
 
 /**
@@ -687,7 +688,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setReviewLocal = (id: string, status: Review['status']) => setState((s) => ({ ...s, reviews: s.reviews.map((r) => (r.id === id ? { ...r, status } : r)) }));
 
   const signIn: Store['signIn'] = (u) => setState((s) => ({ ...s, user: { ...u, since: s.user?.since ?? Date.now() } }));
-  const signOut = () => { if (supabase) void supabase.auth.signOut(); setState((s) => ({ ...s, user: null })); };
+  const signOut = () => { purgeUserCaches(); if (supabase) void supabase.auth.signOut(); setState((s) => ({ ...s, user: null })); };
   const updateUser: Store['updateUser'] = (u) => {
     setState((s) => (s.user ? { ...s, user: { ...s.user, ...u } } : s));
     if (supabase && uid.current) run(supabase.from('profiles').update({ ...(u.firstName !== undefined && { first_name: u.firstName }), ...(u.lastName !== undefined && { last_name: u.lastName }), ...(u.mobile !== undefined && { mobile: u.mobile }), ...(u.fit !== undefined && { fit: u.fit }) }).eq('id', uid.current));

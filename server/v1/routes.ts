@@ -5,6 +5,7 @@ import { cashfreeConfigured, cashfreeMode, createSession, fetchSettlement, verif
 import { applyCourierEvent, tick } from '../automation/engine.js';
 import { courierByName, type ShipmentRow } from '../courier/index.js';
 import { normaliseState, stateFromPin } from '../../src/site/pincode.js';
+import { memo } from './memo.js';
 
 type Result = unknown | { __status: number; body: unknown };
 type Handler = (c: Ctx) => Promise<Result>;
@@ -23,15 +24,17 @@ function add(method: string, path: string, auth: Auth, handler: Handler, o: { bu
 }
 /** Public data every visitor asks for: the CDN keeps a copy for a short while, so a rush of shoppers hits the CDN, not the database. */
 const PUBLIC_CACHE = 'public, s-maxage=20, stale-while-revalidate=300, stale-if-error=3600';
+/** Public catalogue reads use the ANONYMOUS client and never look at the caller's token, so what is cached can never depend on who asked. */
+const publicDb = () => clientFor(undefined);
 const must = <T>(r: { data: T | null; error: { code?: string; message: string } | null }): T => { if (r.error) dbFail(r.error); return r.data as T; };
 
 // ------------------------------------------------------------------ public catalogue
-add('GET', '/config', 'none', async () => {
+add('GET', '/config', 'none', async () => memo('config', 60_000, async () => {
   // Safe automatic retries of an order need the idempotency column (migration 011); say so only when it exists.
   let idempotentOrders = false;
   try { const { error } = await serviceClient().from('orders').select('idempotency_key').limit(0); idempotentOrders = !error; } catch { /* leave false */ }
   return { version: 'v1', payments: { cashfree: cashfreeConfigured(), mode: cashfreeConfigured() ? cashfreeMode() : null }, features: { idempotentOrders, instantSignup: instantSignup() } };
-}, { cache: PUBLIC_CACHE });
+}), { cache: PUBLIC_CACHE });
 // Uptime monitors call this. It touches the database with one tiny query and says how long that took.
 add('GET', '/health', 'none', async ({ db }) => {
   const t = Date.now();
@@ -40,36 +43,46 @@ add('GET', '/health', 'none', async ({ db }) => {
   return { ok: true, database_ms: Date.now() - t, time: new Date().toISOString() };
 }, { bucket: 'health', max: 120 });
 
-add('GET', '/products', 'none', async ({ db, url }) => {
+add('GET', '/products', 'none', async ({ url }) => {
+  // Only these parameters matter; anything else in the URL is ignored, so a made-up query string can never create new cache entries.
   const q = url.searchParams;
-  let query = db.from('products').select('data').order('sort');
-  const gender = q.get('gender'); if (gender === 'men' || gender === 'women') query = query.eq('data->>gender', gender);
-  const category = q.get('category'); if (category && category.length < 80) query = query.eq('data->>category', category);
-  const search = (q.get('q') ?? '').replace(/[%_,()*]/g, ' ').trim().slice(0, 60); if (search) query = query.ilike('data->>name', `%${search}%`);
-  const lim = Math.min(100, Math.max(1, Number(q.get('limit')) || 50)), off = Math.max(0, Number(q.get('offset')) || 0);
-  const rows = must(await query.range(off, off + lim - 1));
-  return { items: rows.map((r: any) => r.data), limit: lim, offset: off };
+  const gender = q.get('gender') === 'men' || q.get('gender') === 'women' ? q.get('gender')! : '';
+  const rawCategory = q.get('category') ?? ''; const category = rawCategory && rawCategory.length < 80 ? rawCategory : '';
+  const search = (q.get('q') ?? '').replace(/[%_,()*]/g, ' ').trim().slice(0, 60);
+  const lim = Math.min(100, Math.max(1, Number(q.get('limit')) || 50)), off = Math.min(10_000, Math.max(0, Number(q.get('offset')) || 0));
+  return memo(`products|${gender}|${category}|${search.toLowerCase()}|${lim}|${off}`, 10_000, async () => {
+    let query = publicDb().from('products').select('data').order('sort');
+    if (gender) query = query.eq('data->>gender', gender);
+    if (category) query = query.eq('data->>category', category);
+    if (search) query = query.ilike('data->>name', `%${search}%`);
+    const rows = must(await query.range(off, off + lim - 1));
+    return { items: rows.map((r: any) => r.data), limit: lim, offset: off };
+  });
 }, { cache: PUBLIC_CACHE });
-add('GET', '/products/:id', 'none', async ({ db, params }) => {
-  const r = must(await db.from('products').select('data').eq('id', params.id).maybeSingle());
-  if (!r) throw new ApiError(404, 'not_found', 'Product not found.');
-  return (r as any).data;
+add('GET', '/products/:id', 'none', async ({ params }) => {
+  if (!UUIDISH.test(params.id)) throw new ApiError(404, 'not_found', 'Product not found.');
+  const data = await memo(`product|${params.id}`, 10_000, async () => {
+    const r = must(await publicDb().from('products').select('data').eq('id', params.id).maybeSingle());
+    if (!r) throw new ApiError(404, 'not_found', 'Product not found.');   // errors are never stored by memo
+    return (r as any).data;
+  });
+  return data;
 }, { cache: PUBLIC_CACHE });
-add('GET', '/categories', 'none', async ({ db }) => ({ items: must(await db.from('categories').select('slug, gender, name').order('sort')) }), { cache: PUBLIC_CACHE });
+add('GET', '/categories', 'none', async () => memo('categories', 60_000, async () => ({ items: must(await publicDb().from('categories').select('slug, gender, name').order('sort')) })), { cache: PUBLIC_CACHE });
 add('GET', '/coupons/:code', 'none', async ({ db, params }) => {
   const r = must(await db.rpc('get_coupon', { p_code: params.code }));
   if (!r) throw new ApiError(404, 'not_found', 'That code is not valid.');
   return r;
 }, { bucket: 'coupon', max: 20 });
-add('GET', '/reviews', 'none', async ({ db, url }) => {
+add('GET', '/reviews', 'none', async ({ url }) => {
   const pid = url.searchParams.get('productId') ?? '';
   if (!UUIDISH.test(pid)) throw new ApiError(400, 'invalid', 'productId is required.');
-  return { items: must(await db.from('reviews').select('id, name, rating, body, size, fit, created_at').eq('product_id', pid).eq('status', 'Published').order('created_at', { ascending: false }).limit(100)) };
+  return memo(`reviews|${pid}`, 30_000, async () => ({ items: must(await publicDb().from('reviews').select('id, name, rating, body, size, fit, created_at').eq('product_id', pid).eq('status', 'Published').order('created_at', { ascending: false }).limit(100)) }));
 }, { cache: PUBLIC_CACHE });
 // The newest published reviews across the shop (what the storefront shows), cached like the catalogue.
-add('GET', '/reviews/recent', 'none', async ({ db, url }) => {
+add('GET', '/reviews/recent', 'none', async ({ url }) => {
   const lim = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 300));
-  return { items: must(await db.from('reviews').select('id, product_id, name, rating, body, size, fit, status, created_at').eq('status', 'Published').order('created_at', { ascending: false }).limit(lim)) };
+  return memo(`reviews-recent|${lim}`, 30_000, async () => ({ items: must(await publicDb().from('reviews').select('id, product_id, name, rating, body, size, fit, status, created_at').eq('status', 'Published').order('created_at', { ascending: false }).limit(lim)) }));
 }, { cache: PUBLIC_CACHE });
 
 // ------------------------------------------------------------------ checkout, orders (guest allowed on checkout/track)
@@ -110,24 +123,30 @@ add('POST', '/reviews', 'required', async (c) => {
 // table of PIN prefixes if the directory is slow or down, so checkout never waits on it.
 add('GET', '/pincode/:pin', 'none', async ({ params }) => {
   const pin = params.pin;
-  if (!/^[1-9]\d{5}$/.test(pin)) throw new ApiError(400, 'invalid', 'A PIN code has 6 digits.');
-  try {
-    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 4000);
-    const r = await fetch('https://api.postalpincode.in/pincode/' + pin, { signal: ctl.signal }); clearTimeout(t);
-    const j = (await r.json()) as Array<{ Status?: string; PostOffice?: Array<{ State?: string; District?: string; Block?: string; Name?: string }> }>;
-    const rec = Array.isArray(j) ? j[0] : undefined;
-    if (rec?.Status === 'Success' && rec.PostOffice?.length) {
-      const po = rec.PostOffice[0];
-      const block = po.Block && po.Block !== 'NA' ? po.Block : '';
-      // India Post's own list still files Ladakh's PINs under Jammu and Kashmir, so our table wins for those
-      const own = stateFromPin(pin);
-      return { pin, state: own === 'Ladakh' ? 'Ladakh' : normaliseState(po.State) || own, city: block || po.District || '', district: po.District ?? '', source: 'post' };
-    }
-    if (rec?.Status === 'Error' || rec?.Status === '404') throw new ApiError(404, 'not_found', 'No such PIN code.');
-  } catch (e) { if (e instanceof ApiError) throw e; /* the directory is down: use the built-in table */ }
-  const state = stateFromPin(pin);
-  if (!state) throw new ApiError(404, 'not_found', 'No such PIN code.');
-  return { pin, state, city: '', district: '', source: 'estimate' };
+  if (!/^[1-9]d{5}$/.test(pin)) throw new ApiError(400, 'invalid', 'A PIN code has 6 digits.');
+  type Found = { pin: string; state: string; city: string; district: string; source: 'post' | 'estimate' };
+  // One call to India Post per PIN per hour (per instance), however many people type it. Directory answers are remembered for an hour,
+  // "no such PIN" for 10 minutes, and the offline estimate only for 30 seconds so the real answer is tried again soon.
+  const r = await memo<Found | { missing: true }>('pin|' + pin, 3_600_000, async () => {
+    try {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 4000);
+      const res = await fetch('https://api.postalpincode.in/pincode/' + pin, { signal: ctl.signal }); clearTimeout(t);
+      const j = (await res.json()) as Array<{ Status?: string; PostOffice?: Array<{ State?: string; District?: string; Block?: string; Name?: string }> }>;
+      const rec = Array.isArray(j) ? j[0] : undefined;
+      if (rec?.Status === 'Success' && rec.PostOffice?.length) {
+        const po = rec.PostOffice[0];
+        const block = po.Block && po.Block !== 'NA' ? po.Block : '';
+        // India Post's own list still files Ladakh's PINs under Jammu and Kashmir, so our table wins for those
+        const own = stateFromPin(pin);
+        return { pin, state: own === 'Ladakh' ? 'Ladakh' : normaliseState(po.State) || own, city: block || po.District || '', district: po.District ?? '', source: 'post' as const };
+      }
+      if (rec?.Status === 'Error' || rec?.Status === '404') return { missing: true as const };
+    } catch { /* the directory is down: use the built-in table */ }
+    const state = stateFromPin(pin);
+    return state ? { pin, state, city: '', district: '', source: 'estimate' as const } : { missing: true as const };
+  }, { max: 5000, ttlOf: (v) => ('missing' in v ? 600_000 : v.source === 'estimate' ? 30_000 : 3_600_000) });
+  if ('missing' in r) throw new ApiError(404, 'not_found', 'No such PIN code.');
+  return r;
 }, { bucket: 'pincode', max: 60, cache: 'public, s-maxage=3600, stale-while-revalidate=86400' });
 
 // ------------------------------------------------------------------ account

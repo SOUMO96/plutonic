@@ -6,6 +6,24 @@ import { consumePendingScroll, go, Link, useRoute } from './router';
 import { StoreProvider } from './store';
 import { Footer, Header, Toast } from './ui';
 import { ErrorBoundary } from './ErrorBoundary';
+import { applyUpdate, onUpdateReady } from '../pwa';
+
+/** "New version available" bar. It never reloads by itself, and stays out of the way while someone is paying or has just ordered. */
+function UpdatePrompt() {
+  const route = useRoute();
+  const [ready, setReady] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => onUpdateReady(setReady), []);
+  const busy = route.path.startsWith('/checkout') || route.path.startsWith('/order');
+  if (!ready || dismissed || busy) return null;
+  return (
+    <div className="pl-update" role="status" aria-live="polite">
+      <span>New version available</span>
+      <button type="button" onClick={applyUpdate}>Reload</button>
+      <button type="button" className="pl-update-x" onClick={() => setDismissed(true)} aria-label="Dismiss">×</button>
+    </div>
+  );
+}
 import Home from './pages/Home';
 import Collection from './pages/Collection';
 import Listing from './pages/Listing';
@@ -117,6 +135,7 @@ export default function SiteApp({ onReplayIntro }: { onReplayIntro: () => void }
         </main>
         {!bare && <Footer onReplayIntro={onReplayIntro} />}
         <Toast />
+        <UpdatePrompt />
       </div>
     </StoreProvider>
   );

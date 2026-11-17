@@ -1,3 +1,4 @@
+import { purgeUserCaches } from '../../pwa';
 import { Suspense, lazy, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { go, Link } from '../router';
@@ -23,6 +24,7 @@ async function fetchSession(): Promise<'allowed' | 'denied' | 'expired'> {
 }
 
 export async function adminSignOut() {
+  purgeUserCaches();
   try { await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch { /* cookie also expires on its own */ }
   go('/admin/login');
 }
